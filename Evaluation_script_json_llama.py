@@ -1125,7 +1125,7 @@ if __name__ == '__main__':
     # main('Refs.xml', 'Cands2.xml', 'Results.json')
     # ref_file_path = 'data/webnlg_data/release_v3.0/en/test/semantic-parsing-test-data-with-refs-en.xml'
     # cand_file_path = 'results/vocab_dbpedia_triples_with_reverse _20230309-113542_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_rebel.tsv'
-    input_file_path = 'results/llama/vicuna-7b-with-explanasion-correct.csv'
+    input_file_path = 'vicuna-7b-with-explanasion-correct-test.csv'
 
     output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
     output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct_details.json'

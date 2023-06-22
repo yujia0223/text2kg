@@ -14,7 +14,7 @@ from utils.prompter import Prompter
 from tqdm import tqdm
 
 device = "cuda"
-
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 def main(
     load_8bit: bool = False,
@@ -112,8 +112,8 @@ def main(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-
-    dt = load_dataset("taesiri/text_to_triplets")
+    dfiles = {"train":"train.csv", "test":"tiny_test.csv"}
+    dt = load_dataset("tsadler/text_to_triplets", data_files=dfiles)
     output = {}
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
@@ -123,12 +123,12 @@ def main(
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # generate a CSV
-    dt = load_dataset("taesiri/text_to_triplets")
+    dt = load_dataset("tsadler/text_to_triplets", data_files=dfiles)
     df = pd.DataFrame(dt["test"])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
-    df.to_csv("vicuna-7b-with-explanasion-correct.csv", index=False)
+    df.to_csv("vicuna-7b-with-explanasion-correct-test.csv", index=False)
 
     # dump df as pickle
     with open("vicuna-7b-with-explanasion-correct-df.pickle", "wb") as handle:

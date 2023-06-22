@@ -40,6 +40,9 @@ import timeit
 device = "cuda"
 currentpath = os.getcwd()
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# TSadler: For copied dataset
+data_files = {"train":"train.csv", "test":"tiny_test.csv"}
 
 def benchmark(
     load_8bit: bool = False,
@@ -137,8 +140,10 @@ def benchmark(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-
-    dt = load_dataset("taesiri/text_to_triplets")
+    print("Before load_dataset")
+    # TSadler: Made a simple copy of the dataset for testing. Organization dataset may be better.
+    # dt = load_dataset("taesiri/text_to_triplets")
+    dt = load_dataset("tsadler/text_to_triplets", data_files=data_files)
     output = {}
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
@@ -149,7 +154,8 @@ def benchmark(
 
     # TSadler: Removing intermediate CSV file for combined code
     # generate a CSV
-    dt = load_dataset("taesiri/text_to_triplets")
+    # dt = load_dataset("taesiri/text_to_triplets")
+    dt = load_dataset("tsadler/text_to_triplets", data_files=data_files)
     df = pd.DataFrame(dt["test"])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
@@ -1258,15 +1264,16 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
         json.dump(all, outfile)
 
 def main():
-    df = fire.Fire(benchmark)
+    df = benchmark()
 
-    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
-    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct_details.json'
+    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
+    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined-details.json'
     evaluate(df, output_path, output_details_path)
 
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
 if __name__ == '__main__':
-    main()
+    fire.Fire(main)
+    #main()
     """
     # main(sys.argv[1], sys.argv[2], sys.argv[3])
     # main('Refs.xml', 'Cands2.xml', 'Results.json')
