@@ -141,7 +141,8 @@ def benchmark(
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
     print("Before load_dataset")
-    # TSadler: Made a simple copy of the dataset for testing. Organization dataset may be better.
+    # TSadler: Made a simple copy of the dataset for testing, as the other was private.
+    # Use the dataset you have access to. Organization dataset may be helpful.
     # dt = load_dataset("taesiri/text_to_triplets")
     dt = load_dataset("tsadler/text_to_triplets", data_files=data_files)
     output = {}
@@ -149,8 +150,9 @@ def benchmark(
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
-    with open("output-vicuna-7b-with-explanasion-correct.pickle", "wb") as handle:
-        pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # TSadler: Removing intermediate files
+    #with open("output-vicuna-7b-with-explanasion-correct.pickle", "wb") as handle:
+    #    pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
     # generate a CSV
@@ -1264,10 +1266,12 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
         json.dump(all, outfile)
 
 def main():
+    # Main function from benchmark.py
     df = benchmark()
 
-    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
-    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined-details.json'
+    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
+    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-correct_details.json'
+    # Main function from Evaluation_script_json_llama.py
     evaluate(df, output_path, output_details_path)
 
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
