@@ -1,3 +1,19 @@
+# Benchmark imports
+import pandas as pd  # Import pandas library
+import sys
+from datasets import load_dataset
+import fire
+import torch
+import transformers
+from transformers import LlamaForCausalLM, LlamaTokenizer, GenerationConfig
+import pickle
+# alpaca-lora utils
+from utils.callbacks import Iteratorize, Stream
+from utils.prompter import Prompter
+
+from tqdm import tqdm
+
+# Evaluation imports
 # import warnings filter
 from warnings import simplefilter
 from sklearn.exceptions import UndefinedMetricWarning
@@ -18,12 +34,209 @@ from sklearn import preprocessing
 import json
 
 import ast
-import pandas as pd
 import numpy as np
 import timeit
 
-
+device = "cuda"
 currentpath = os.getcwd()
+
+
+def benchmark(
+    load_8bit: bool = False,
+    prompt_template: str = "",  # The prompt template to use, will default to alpaca.
+    csv_file: str = None,  # New argument for CSV file
+):
+    prompter = Prompter(prompt_template)
+
+    # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
+    tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
+
+    model = LlamaForCausalLM.from_pretrained(
+        "/home/taesiri/src/alpaca-lora/vicuna-7b--based-export-text-to-triplets-explanation-v3/",
+        load_in_8bit=load_8bit,
+        torch_dtype=torch.float16,
+        device_map="auto",
+    )
+
+    model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
+    model.config.bos_token_id = 1
+    model.config.eos_token_id = 2
+
+    if not load_8bit:
+        model.half()  # seems to fix bugs for some users.
+
+    model.eval()
+    if torch.__version__ >= "2" and sys.platform != "win32":
+        model = torch.compile(model)
+
+    def evaluate(
+        instruction,
+        input=None,
+        temperature=0.1,
+        top_p=0.75,
+        top_k=40,
+        num_beams=4,
+        max_new_tokens=512,
+        stream_output=False,
+        **kwargs,
+    ):
+        prompt = prompter.generate_prompt(instruction, input)
+        inputs = tokenizer(prompt, return_tensors="pt")
+        input_ids = inputs["input_ids"].to(device)
+        generation_config = GenerationConfig(
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            num_beams=num_beams,
+            **kwargs,
+        )
+
+        generate_params = {
+            "input_ids": input_ids,
+            "generation_config": generation_config,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+            "max_new_tokens": max_new_tokens,
+        }
+
+        if stream_output:
+            # Stream the reply 1 token at a time.
+            # This is based on the trick of using 'stopping_criteria' to create an iterator,
+            # from https://github.com/oobabooga/text-generation-webui/blob/ad37f396fc8bcbab90e11ecf17c56c97bfbd4a9c/modules/text_generation.py#L216-L243.
+
+            def generate_with_callback(callback=None, **kwargs):
+                kwargs.setdefault(
+                    "stopping_criteria", transformers.StoppingCriteriaList()
+                )
+                kwargs["stopping_criteria"].append(Stream(callback_func=callback))
+                with torch.no_grad():
+                    model.generate(**kwargs)
+
+            def generate_with_streaming(**kwargs):
+                return Iteratorize(generate_with_callback, kwargs, callback=None)
+
+            with generate_with_streaming(**generate_params) as generator:
+                for output in generator:
+                    decoded_output = tokenizer.decode(output)
+
+                    if output[-1] in [tokenizer.eos_token_id]:
+                        break
+
+                    yield prompter.get_response(decoded_output)
+            return  # early return for stream_output
+
+        # Without streaming
+        with torch.no_grad():
+            generation_output = model.generate(
+                input_ids=input_ids,
+                generation_config=generation_config,
+                return_dict_in_generate=True,
+                output_scores=True,
+                max_new_tokens=max_new_tokens,
+            )
+        s = generation_output.sequences[0]
+        output = tokenizer.decode(s)
+        yield prompter.get_response(output)
+
+    dt = load_dataset("taesiri/text_to_triplets")
+    output = {}
+    for i in tqdm(range(len(dt["test"]))):
+        entry = dt["test"][i]
+        output[i] = list(evaluate(entry["instruction"], entry["context"]))
+        # print(output[i])
+    with open("output-vicuna-7b-with-explanasion-correct.pickle", "wb") as handle:
+        pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # TSadler: Removing intermediate CSV file for combined code
+    # generate a CSV
+    dt = load_dataset("taesiri/text_to_triplets")
+    df = pd.DataFrame(dt["test"])
+    df["gt"] = df["response"]
+    df = df.drop(columns=["response"])
+    df["model_output"] = [x[0] for x in output.values()]
+    return df
+    #df.to_csv("vicuna-7b-with-explanasion-correct.csv", index=False)
+
+    # dump df as pickle
+    #with open("vicuna-7b-with-explanasion-correct-df.pickle", "wb") as handle:
+    #    pickle.dump(df, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+
+def get_Cands_and_Refs_from_csv(df):
+    #df = pd.read_csv(filepath, header=0)
+    print(df.head())
+
+    allcand_ids = df.index.values
+    all_text = df['context'].values
+
+    allcandtriples = []
+    allreftriples = []
+    for i in range(len(df)):
+        # newtriples = []
+        triples_str_cand = df['model_output'].values[i]
+
+        # vicuna: for this model
+        triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
+        # print(triples_cand)
+        tmp = []
+        for triple in triples_cand:
+            if len(triple.split(' | ')) != 3:
+                continue
+            else:
+                tmp.append(triple)
+        triples_cand = tmp
+        # triples_cand = [triple.replace('\\', '').replace(',', '') for triple in triples_cand]
+        # triples_cand = ast.literal_eval("[\\" + triples_str_cand + "]")[0]
+        # # for triple in triples:
+        # #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+        # #     newtriples.append(triple_str)
+        allcandtriples.append(triples_cand)
+
+        triples_str_ref = df['gt'].values[i]
+        triples_ref = ast.literal_eval("[" + triples_str_ref + "]")[0]
+        # for triple in triples:
+        #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+        #     newtriples.append(triple_str)
+        allreftriples.append(triples_ref)
+
+    newcandlist = []
+    
+    for entry in allcandtriples:
+        newtriples = []
+        # triple 'Turn_Me_On_(album) | runtime | 35.1'
+        for triple in entry:
+            # triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r'_', ' ', newtriple).lower()
+            newtriple = re.sub(r'\s+', ' ', newtriple).lower()
+            adjusttriple = newtriple.split(' | ')
+            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
+            if manualmodified:
+                adjusttriple[-1] = manualmodified.group(1)
+                newtriple = ' | '.join(adjusttriple)
+            newtriples.append(newtriple)
+        newcandlist.append(newtriples)
+
+    newreflist = []
+    
+    for entry in allreftriples:
+        newtriples = []
+        # triple 'Turn_Me_On_(album) | runtime | 35.1'
+        for triple in entry:
+            # triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r'_', ' ', newtriple).lower()
+            newtriple = re.sub(r'\s+', ' ', newtriple).lower()
+            adjusttriple = newtriple.split(' | ')
+            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
+            if manualmodified:
+                adjusttriple[-1] = manualmodified.group(1)
+                newtriple = ' | '.join(adjusttriple)
+            newtriples.append(newtriple)
+        newreflist.append(newtriples)
+
+    return allcand_ids, all_text, allcandtriples, newcandlist, allreftriples, newreflist
 
 def getRefs(filepath, allcand_ids):
     with open(filepath, encoding='utf-8') as fp:
@@ -41,15 +254,14 @@ def getRefs(filepath, allcand_ids):
             entryreftriples.append(modtriple.text)
         allreftriples.append(entryreftriples)
 
-    # Seems to be a list of tripes who have been modified to be all lowercase, removing _, making multi-spaces one space.
     newreflist = []
 
     for entry in allreftriples:
         newtriples = []
         for triple in entry:
-            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower() # Adds space bettwen lowercase char followed by uppercase char
-            newtriple = re.sub(r'_', ' ', newtriple).lower()  # Lowercase, replace _ with space
-            newtriple = re.sub(r'\s+', ' ', newtriple).lower()  # Lowercase, replace many spaces with one space
+            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r'_', ' ', newtriple).lower()
+            newtriple = re.sub(r'\s+', ' ', newtriple).lower()
             adjusttriple = newtriple.split(' | ')
             manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
             if manualmodified:
@@ -68,7 +280,7 @@ def get_Cands_From_rebel_Tsv(filepath):
     # print(df.head())
     # Get the triples for row with id 'Id770'
     # Example of triples: [('Abraham A. Ribicoff', 'born in', 'United States'), ('United States', 'has ethnic group', 'African Americans')]
-    # triples_str = df[df['id'] == 'Id770']['triples'].values[0]
+    # triples_str_ref = df[df['id'] == 'Id770']['triples'].values[0]
     # # Convert the triples string to a list of tuples
     # triples = ast.literal_eval("[" + triples_str + "]")[0]
     allcand_ids = df['id'].values
@@ -138,7 +350,6 @@ def get_Cands_From_Tsv(filepath):
             newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
             newtriple = re.sub(r'_', ' ', newtriple).lower()
             newtriple = re.sub(r'\s+', ' ', newtriple).lower()
-            newtriple = re.sub(r'\^\^xsd:[a-zA-Z]*', '', newtriple).lower()
             adjusttriple = newtriple.split(' | ')
             manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
             if manualmodified:
@@ -1016,10 +1227,11 @@ def calculateExactTripleScore(reflist, candlist, alldict):
 
     return alldict
 
-def evaluation(reffile, candfile, outputfile_overall, outputfile_details):
-    allcand_ids, all_text, candlist, newcandlist = get_Cands_From_Tsv(candfile)
-    reflist, newreflist = getRefs(reffile, allcand_ids)
+def evaluate(input_dataframe, outputfile_overall, outputfile_details):
+    # allcand_ids, all_text, candlist, newcandlist = get_Cands_From_rebel_Tsv(candfile)
+    # reflist, newreflist = getRefs(reffile, allcand_ids)
     # candlist, newcandlist = getCands(candfile)
+    allcand_ids, all_text, allcandtriples, newcandlist, allreftriples, newreflist = get_Cands_and_Refs_from_csv(input_dataframe)
     starting_time = timeit.default_timer()
     print("Start time :",starting_time)
     totalsemevallist, totalsemevallistpertag = calculateAllScores(newreflist, newcandlist)
@@ -1028,15 +1240,16 @@ def evaluation(reffile, candfile, outputfile_overall, outputfile_details):
     alldict, triple_score, combination_selected, triple_score_sum = calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, newcandlist)
     function2_time = timeit.default_timer() 
     print("calculate all score time :", function2_time - function1_time)
-    alldict2 = calculateExactTripleScore(reflist, candlist, alldict)
+    alldict2 = calculateExactTripleScore(allreftriples, allcandtriples, alldict)
     with open(outputfile_overall, 'w') as outfile:
         json.dump(alldict2, outfile)
 
     all = {}
-    all['id'] = list(allcand_ids)
+    # all['id'] = list(allcand_ids)
+    all['id'] = allcand_ids.tolist()
     all['text'] = list(all_text)
-    all['ref'] = reflist
-    all['cand'] = candlist
+    all['ref'] = allreftriples
+    all['cand'] = allcandtriples
     all['triple_score'] = triple_score
     all['combination'] = combination_selected
     all['triple_score_sum'] = triple_score_sum
@@ -1044,15 +1257,27 @@ def evaluation(reffile, candfile, outputfile_overall, outputfile_details):
     with open(outputfile_details, 'w') as outfile:
         json.dump(all, outfile)
 
+def main():
+    df = fire.Fire(benchmark)
+
+    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
+    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct_details.json'
+    evaluate(df, output_path, output_details_path)
+
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
 if __name__ == '__main__':
+    main()
+    """
     # main(sys.argv[1], sys.argv[2], sys.argv[3])
     # main('Refs.xml', 'Cands2.xml', 'Results.json')
-    ref_file_path = 'data/webnlg_data/release_v3.0/en/test/semantic-parsing-test-data-with-refs-en.xml'
-    cand_file_path = 'results/processed/check_embedding_similarity/20230606-153549_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_chatgpt35.tsv'
+    # ref_file_path = 'data/webnlg_data/release_v3.0/en/test/semantic-parsing-test-data-with-refs-en.xml'
+    # cand_file_path = 'results/vocab_dbpedia_triples_with_reverse _20230309-113542_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_rebel.tsv'
+    input_file_path = 'results/llama/vicuna-7b-with-explanasion-correct.csv'
 
-    output_path = 'results/evaluation/webnlg/check_embedding_similarity/20230606-153549_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_chatgpt35.json'
-    output_details_path = 'results/evaluation/webnlg/check_embedding_similarity/20230606-153549_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_chatgpt35_details.json'
+    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
+    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct_details.json'
     
 
-    evaluation(ref_file_path, cand_file_path,output_path, output_details_path)
+    # main(ref_file_path, cand_file_path,output_path, output_details_path)
+    main(input_file_path, output_path, output_details_path)
+    """

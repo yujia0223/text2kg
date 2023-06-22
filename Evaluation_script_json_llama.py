@@ -25,6 +25,81 @@ import timeit
 
 currentpath = os.getcwd()
 
+def get_Cands_and_Refs_from_csv(filepath):
+    df = pd.read_csv(filepath, header=0)
+    print(df.head())
+
+    allcand_ids = df.index.values
+    all_text = df['context'].values
+
+    allcandtriples = []
+    allreftriples = []
+    for i in range(len(df)):
+        # newtriples = []
+        triples_str_cand = df['model_output'].values[i]
+
+        # vicuna: for this model
+        triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
+        # print(triples_cand)
+        tmp = []
+        for triple in triples_cand:
+            if len(triple.split(' | ')) != 3:
+                continue
+            else:
+                tmp.append(triple)
+        triples_cand = tmp
+        # triples_cand = [triple.replace('\\', '').replace(',', '') for triple in triples_cand]
+        # triples_cand = ast.literal_eval("[\\" + triples_str_cand + "]")[0]
+        # # for triple in triples:
+        # #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+        # #     newtriples.append(triple_str)
+        allcandtriples.append(triples_cand)
+
+        triples_str_ref = df['gt'].values[i]
+        triples_ref = ast.literal_eval("[" + triples_str_ref + "]")[0]
+        # for triple in triples:
+        #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+        #     newtriples.append(triple_str)
+        allreftriples.append(triples_ref)
+
+    newcandlist = []
+    
+    for entry in allcandtriples:
+        newtriples = []
+        # triple 'Turn_Me_On_(album) | runtime | 35.1'
+        for triple in entry:
+            # triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r'_', ' ', newtriple).lower()
+            newtriple = re.sub(r'\s+', ' ', newtriple).lower()
+            adjusttriple = newtriple.split(' | ')
+            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
+            if manualmodified:
+                adjusttriple[-1] = manualmodified.group(1)
+                newtriple = ' | '.join(adjusttriple)
+            newtriples.append(newtriple)
+        newcandlist.append(newtriples)
+
+    newreflist = []
+    
+    for entry in allreftriples:
+        newtriples = []
+        # triple 'Turn_Me_On_(album) | runtime | 35.1'
+        for triple in entry:
+            # triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
+            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r'_', ' ', newtriple).lower()
+            newtriple = re.sub(r'\s+', ' ', newtriple).lower()
+            adjusttriple = newtriple.split(' | ')
+            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
+            if manualmodified:
+                adjusttriple[-1] = manualmodified.group(1)
+                newtriple = ' | '.join(adjusttriple)
+            newtriples.append(newtriple)
+        newreflist.append(newtriples)
+
+    return allcand_ids, all_text, allcandtriples, newcandlist, allreftriples, newreflist
+
 def getRefs(filepath, allcand_ids):
     with open(filepath, encoding='utf-8') as fp:
         refssoup = BeautifulSoup(fp, 'lxml')
@@ -41,15 +116,14 @@ def getRefs(filepath, allcand_ids):
             entryreftriples.append(modtriple.text)
         allreftriples.append(entryreftriples)
 
-    # Seems to be a list of tripes who have been modified to be all lowercase, removing _, making multi-spaces one space.
     newreflist = []
 
     for entry in allreftriples:
         newtriples = []
         for triple in entry:
-            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower() # Adds space bettwen lowercase char followed by uppercase char
-            newtriple = re.sub(r'_', ' ', newtriple).lower()  # Lowercase, replace _ with space
-            newtriple = re.sub(r'\s+', ' ', newtriple).lower()  # Lowercase, replace many spaces with one space
+            newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
+            newtriple = re.sub(r'_', ' ', newtriple).lower()
+            newtriple = re.sub(r'\s+', ' ', newtriple).lower()
             adjusttriple = newtriple.split(' | ')
             manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
             if manualmodified:
@@ -68,7 +142,7 @@ def get_Cands_From_rebel_Tsv(filepath):
     # print(df.head())
     # Get the triples for row with id 'Id770'
     # Example of triples: [('Abraham A. Ribicoff', 'born in', 'United States'), ('United States', 'has ethnic group', 'African Americans')]
-    # triples_str = df[df['id'] == 'Id770']['triples'].values[0]
+    # triples_str_ref = df[df['id'] == 'Id770']['triples'].values[0]
     # # Convert the triples string to a list of tuples
     # triples = ast.literal_eval("[" + triples_str + "]")[0]
     allcand_ids = df['id'].values
@@ -138,7 +212,6 @@ def get_Cands_From_Tsv(filepath):
             newtriple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
             newtriple = re.sub(r'_', ' ', newtriple).lower()
             newtriple = re.sub(r'\s+', ' ', newtriple).lower()
-            newtriple = re.sub(r'\^\^xsd:[a-zA-Z]*', '', newtriple).lower()
             adjusttriple = newtriple.split(' | ')
             manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
             if manualmodified:
@@ -1016,10 +1089,11 @@ def calculateExactTripleScore(reflist, candlist, alldict):
 
     return alldict
 
-def evaluation(reffile, candfile, outputfile_overall, outputfile_details):
-    allcand_ids, all_text, candlist, newcandlist = get_Cands_From_Tsv(candfile)
-    reflist, newreflist = getRefs(reffile, allcand_ids)
+def main(input_file, outputfile_overall, outputfile_details):
+    # allcand_ids, all_text, candlist, newcandlist = get_Cands_From_rebel_Tsv(candfile)
+    # reflist, newreflist = getRefs(reffile, allcand_ids)
     # candlist, newcandlist = getCands(candfile)
+    allcand_ids, all_text, allcandtriples, newcandlist, allreftriples, newreflist = get_Cands_and_Refs_from_csv(input_file)
     starting_time = timeit.default_timer()
     print("Start time :",starting_time)
     totalsemevallist, totalsemevallistpertag = calculateAllScores(newreflist, newcandlist)
@@ -1028,15 +1102,16 @@ def evaluation(reffile, candfile, outputfile_overall, outputfile_details):
     alldict, triple_score, combination_selected, triple_score_sum = calculateSystemScore(totalsemevallist, totalsemevallistpertag, newreflist, newcandlist)
     function2_time = timeit.default_timer() 
     print("calculate all score time :", function2_time - function1_time)
-    alldict2 = calculateExactTripleScore(reflist, candlist, alldict)
+    alldict2 = calculateExactTripleScore(allreftriples, allcandtriples, alldict)
     with open(outputfile_overall, 'w') as outfile:
         json.dump(alldict2, outfile)
 
     all = {}
-    all['id'] = list(allcand_ids)
+    # all['id'] = list(allcand_ids)
+    all['id'] = allcand_ids.tolist()
     all['text'] = list(all_text)
-    all['ref'] = reflist
-    all['cand'] = candlist
+    all['ref'] = allreftriples
+    all['cand'] = allcandtriples
     all['triple_score'] = triple_score
     all['combination'] = combination_selected
     all['triple_score_sum'] = triple_score_sum
@@ -1048,11 +1123,13 @@ def evaluation(reffile, candfile, outputfile_overall, outputfile_details):
 if __name__ == '__main__':
     # main(sys.argv[1], sys.argv[2], sys.argv[3])
     # main('Refs.xml', 'Cands2.xml', 'Results.json')
-    ref_file_path = 'data/webnlg_data/release_v3.0/en/test/semantic-parsing-test-data-with-refs-en.xml'
-    cand_file_path = 'results/processed/check_embedding_similarity/20230606-153549_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_chatgpt35.tsv'
+    # ref_file_path = 'data/webnlg_data/release_v3.0/en/test/semantic-parsing-test-data-with-refs-en.xml'
+    # cand_file_path = 'results/vocab_dbpedia_triples_with_reverse _20230309-113542_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_rebel.tsv'
+    input_file_path = 'results/llama/vicuna-7b-with-explanasion-correct.csv'
 
-    output_path = 'results/evaluation/webnlg/check_embedding_similarity/20230606-153549_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_chatgpt35.json'
-    output_details_path = 'results/evaluation/webnlg/check_embedding_similarity/20230606-153549_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_chatgpt35_details.json'
+    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
+    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct_details.json'
     
 
-    evaluation(ref_file_path, cand_file_path,output_path, output_details_path)
+    # main(ref_file_path, cand_file_path,output_path, output_details_path)
+    main(input_file_path, output_path, output_details_path)

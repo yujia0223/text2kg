@@ -7,7 +7,9 @@ import torch
 import transformers
 from transformers import LlamaForCausalLM, LlamaTokenizer, GenerationConfig
 import pickle
-from utils import Iteratorize, Stream, Prompter
+#from utils import Iteratorize, Stream, Prompter
+from utils.callbacks import Iteratorize, Stream
+from utils.prompter import Prompter
 
 from tqdm import tqdm
 
@@ -23,7 +25,7 @@ def main(
 
     # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
     tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
-
+    
     model = LlamaForCausalLM.from_pretrained(
         "/home/taesiri/src/alpaca-lora/vicuna-7b--based-export-text-to-triplets-explanation-v3/",
         load_in_8bit=load_8bit,
