@@ -112,7 +112,7 @@ def main(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-    dfiles = {"train":"train.csv", "test":"tiny_test.csv"}
+    dfiles = {"train":"train.csv", "test":"test.csv"}
     dt = load_dataset("tsadler/text_to_triplets", data_files=dfiles)
     output = {}
     for i in tqdm(range(len(dt["test"]))):
