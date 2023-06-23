@@ -140,10 +140,10 @@ def benchmark(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-    print("Before load_dataset")
+
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in range(2):#tqdm(range(len(dt["test"]))):
+    for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
@@ -154,8 +154,6 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     dt = load_dataset("UofA-LINGO/text_to_triplets")
-    #dt = load_dataset("taesiri/text_to_triplets")
-    #dt = load_dataset("tsadler/text_to_triplets", data_files=data_files)
     df = pd.DataFrame(dt["test"][0:2])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
