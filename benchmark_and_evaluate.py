@@ -52,10 +52,11 @@ def benchmark(
     prompter = Prompter(prompt_template)
 
     # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
-    tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
-
+    # tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
+    tokenizer = LlamaTokenizer.from_pretrained("/home/tsadler/models/vicuna-7b")
     model = LlamaForCausalLM.from_pretrained(
-        "/home/taesiri/src/alpaca-lora/vicuna-7b--based-export-text-to-triplets-explanation-v3/",
+        #"/home/taesiri/src/alpaca-lora/vicuna-7b--based-export-text-to-triplets-explanation-v3/",
+        "/home/tsadler/models/lora-vicuna-7b-explanations/hf_ckpt",
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
         device_map="auto",
@@ -140,8 +141,11 @@ def benchmark(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-
-    dt = load_dataset("UofA-LINGO/text_to_triplets")
+    print("Before load_dataset")
+    # TSadler: Made a simple copy of the dataset for testing, as the other was private.
+    # Use the dataset you have access to. Organization dataset may be helpful.
+    # dt = load_dataset("taesiri/text_to_triplets")
+    dt = load_dataset("UofA-LINGO/text_to_triplets", data_files=data_files)
     output = {}
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
@@ -152,9 +156,10 @@ def benchmark(
     #    pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
-    # generate dataframe for the evaluation code
-    dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["test"][0:2])
+    # generate a CSV
+    # dt = load_dataset("taesiri/text_to_triplets")
+    dt = load_dataset("UofA-LINGO/text_to_triplets", data_files=data_files)
+    df = pd.DataFrame(dt["test"])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
@@ -1265,8 +1270,9 @@ def main():
     # Main function from benchmark.py
     df = benchmark()
 
-    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
-    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined-details.json'
+    output_path = '/home/tsadler/results/evaluation/vicuna/vicuna-7b-gpt-correct.json'
+    output_details_path = '/home/tsadler/results/evaluation/vicuna/vicuna-7b-gpt-correct_details.json'
+    # Main function from Evaluation_script_json_llama.py
     evaluate(df, output_path, output_details_path)
 
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
