@@ -40,7 +40,7 @@ import timeit
 device = "cuda"
 currentpath = os.getcwd()
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # TSadler: For copied dataset
 data_files = {"train":"train.csv", "test":"test.csv"}
 
@@ -141,16 +141,17 @@ def benchmark(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-
+    print("Loading dataset for eval")
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
+    print("Starting eval")
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
     # TSadler: Removing intermediate files
-    #with open("output-vicuna-7b-with-explanasion-correct.pickle", "wb") as handle:
-    #    pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open("output-vicuna-7b-with-explanasion-correct.pickle", "wb") as handle:
+        pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
