@@ -24,7 +24,7 @@ def main(
     tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
 
     model = LlamaForCausalLM.from_pretrained(
-        "./vicuna-7b--based-export-text-to-triplets-explanation-v3",
+        "/home/tsadler/models/lora-vicuna-7b-explanations/hf_ckpt",
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
         device_map="auto",
@@ -138,7 +138,7 @@ def main(
                 label="Output",
             )
         ],
-        title="Text to Triplets - using `vicuna-7b--based-export-text-to-triplets-explanation-v3`",
+        title="Text to Triplets - using `vicuna-7b--text-to-triplets-gpt-explanations`",
         description="Generate Triplets using custom Alpaca-LoRA model",  # noqa: E501
     ).queue().launch(server_name="0.0.0.0", share=share_gradio)
 

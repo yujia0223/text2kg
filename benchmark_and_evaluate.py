@@ -40,23 +40,34 @@ import timeit
 device = "cuda"
 currentpath = os.getcwd()
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # TSadler: For copied dataset
 data_files = {"train":"train.csv", "test":"test.csv"}
 
 def benchmark(
+    model_path: str = "",
+    tok: str = "",
     load_8bit: bool = False,
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
     csv_file: str = None,  # New argument for CSV file
 ):
+    if model_path == "":
+        print("Enter the path to the model. (python benchmark_and_evaluate.py --model_path=/home/tsadler/models/vicuna-7b)")
+        exit()
     prompter = Prompter(prompt_template)
-
+    print(f"Benchmarking model at: {model_path}")
+    print(f"Using tokenizer at (blank means model_path): {tok}")
     # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
-    tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
+    # tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
+    tokenizer = None
+    if tok == "":
+        tokenizer = LlamaTokenizer.from_pretrained(model_path)
+    else:
+        tokenizer = LlamaTokenizer.from_pretrained(tok)
 
     model = LlamaForCausalLM.from_pretrained(
         #"/home/taesiri/src/alpaca-lora/vicuna-7b--based-export-text-to-triplets-explanation-v3/",
-        "/home/tsadler/models/lora-vicuna-7b-explanations/hf_ckpt",
+        model_path,
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
         device_map="auto",
@@ -141,16 +152,15 @@ def benchmark(
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
-    print("Loading dataset for eval")
+
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    print("Starting eval")
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
-    # TSadler: Removing intermediate files
-    with open("output-vicuna-7b-with-explanasion-correct.pickle", "wb") as handle:
+    
+    with open("outputwizard.pickle", "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
@@ -1263,12 +1273,21 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     with open(outputfile_details, 'w') as outfile:
         json.dump(all, outfile)
 
-def main():
+def main(
+    model_path: str = "",
+    tok: str = "",
+    output_path: str = "",
+    output_details_path: str = "",
+):
     # Main function from benchmark.py
-    df = benchmark()
-
-    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
-    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined-details.json'
+    print(f"Output: {output_path}\nDetails: {output_details_path}")
+    df = benchmark(model_path=model_path, tok=tok)
+    if output_path == "":
+        output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
+        print(f"Set default output_path: {output_path}")
+    if output_details_path == "":
+        output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined-details.json'
+        print(f"Set default output_path: {output_details_path}")
     evaluate(df, output_path, output_details_path)
 
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
