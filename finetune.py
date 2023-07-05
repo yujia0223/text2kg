@@ -6,6 +6,7 @@ import fire
 import torch
 import transformers
 from datasets import load_dataset
+from transformers.training_args import TrainingArguments
 
 """
 Unused imports:
@@ -26,7 +27,7 @@ from utils.prompter import Prompter
 
 # from https://github.com/tloen/alpaca-lora/issues/483, users ricksun2023 and maekawataiki
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
-from transformers.trainer_callback import TrainerCallback
+from transformers.trainer_callback import TrainerCallback, TrainerControl, TrainerState
 
 class SavePeftModelCallback(TrainerCallback):
     def on_save(self, args, state, control, **kwargs):
@@ -45,6 +46,12 @@ class SavePeftModelCallback(TrainerCallback):
         except Exception as e:
             print(f"Remove {pytorch_model_path} failed.")
         return control
+
+class ClearGPUCallback(TrainerCallback):
+    #def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+    #    torch.cuda.empty_cache()
+    def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        torch.cuda.empty_cache()
 
 def train(
     # model/data params
@@ -266,8 +273,8 @@ def train(
             optim="adamw_torch",
             evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="no",
-            eval_steps=400 if val_set_size > 0 else None,
-            save_steps=150,
+            eval_steps=10 if val_set_size > 0 else None,
+            save_steps=10,
             output_dir=output_dir,
             save_total_limit=3,
             load_best_model_at_end=False,#load_best_model_at_end=True if val_set_size > 0 else False,
@@ -291,7 +298,7 @@ def train(
 
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
-
+    trainer.add_callback(ClearGPUCallback)
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     model.save_pretrained(output_dir)
