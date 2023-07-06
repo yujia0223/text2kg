@@ -160,7 +160,7 @@ def benchmark(
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
     
-    with open("outputwizard.pickle", "wb") as handle:
+    with open("output-orca.pickle", "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
