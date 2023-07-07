@@ -72,7 +72,6 @@ def benchmark(
         torch_dtype=torch.float16,
         device_map="auto",
     )
-    exit(0)
     model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
     model.config.bos_token_id = 1
     model.config.eos_token_id = 2
