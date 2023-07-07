@@ -72,7 +72,6 @@ def benchmark(
         torch_dtype=torch.float16,
         device_map="auto",
     )
-    exit(0)
     model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
     model.config.bos_token_id = 1
     model.config.eos_token_id = 2
@@ -155,7 +154,7 @@ def benchmark(
 
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in tqdm(range(len(dt["train"][0:6606]))):
+    for i in tqdm(range(len(dt["train"]))):
         entry = dt["train"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
@@ -166,7 +165,7 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["train"][0:6606])
+    df = pd.DataFrame(dt["train"])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
