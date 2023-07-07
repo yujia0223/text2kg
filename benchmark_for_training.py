@@ -155,8 +155,8 @@ def benchmark(
 
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in tqdm(range(len(dt["test"]))):
-        entry = dt["test"][i]
+    for i in tqdm(range(len(dt["train"][0:6606]))):
+        entry = dt["train"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
     
@@ -166,7 +166,7 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["test"])
+    df = pd.DataFrame(dt["train"][0:6606])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
