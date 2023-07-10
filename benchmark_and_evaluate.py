@@ -47,6 +47,7 @@ data_files = {"train":"train.csv", "test":"test.csv"}
 def benchmark(
     model_path: str = "",
     tok: str = "",
+    dump: str = "output.pickle",
     load_8bit: bool = False,
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
     csv_file: str = None,  # New argument for CSV file
@@ -159,7 +160,7 @@ def benchmark(
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
     
-    with open("output-orca.pickle", "wb") as handle:
+    with open(dump, "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
@@ -1275,12 +1276,13 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
 def main(
     model_path: str = "",
     tok: str = "",
+    dump: str = "output.pickle",
     output_path: str = "",
     output_details_path: str = "",
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    df = benchmark(model_path=model_path, tok=tok)
+    df = benchmark(model_path=model_path, tok=tok, dump=dump)
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")

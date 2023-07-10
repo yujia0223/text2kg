@@ -47,6 +47,7 @@ data_files = {"train":"train.csv", "test":"test.csv"}
 def benchmark(
     model_path: str = "",
     tok: str = "",
+    dump: str = "output.pickle",
     load_8bit: bool = False,
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
     csv_file: str = None,  # New argument for CSV file
@@ -159,7 +160,7 @@ def benchmark(
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
     
-    with open("output-orca.pickle", "wb") as handle:
+    with open(dump, "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
@@ -434,7 +435,12 @@ def nonrefwords(newreflist, newcandlist, foundnum, ngramlength):
                 #Now find the start and end index of the ngram in the candidate as well
                 findnewcand = find_sub_list(list(ngram), newcandlist)
                 #And all the indices in between
-                newcandindex = list(range(findnewcand[0], findnewcand[1]+1))
+                try:
+                    newcandindex = list(range(findnewcand[0], findnewcand[1]+1))
+                except:
+                    newcandindex = []
+                    print(findnewcand)
+                    print(ngram)
                 # Change the matched words to FOUNDCAND-[FOUNDNUMBER]-[REFERENCE-FOUNDINDEX]
                 for idx, val in enumerate(newcandindex):
                     newcandlist[val] = 'FOUNDCAND-' + str(foundnum) + '-' + str(newrefindex[idx])
@@ -1275,6 +1281,7 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
 def main(
     model_path: str = "",
     tok: str = "",
+    dump: str = "output.pickle",
     pickle: str = "",
     output_path: str = "",
     output_details_path: str = "",
@@ -1282,7 +1289,7 @@ def main(
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
     if pickle == "":
-        df = benchmark(model_path=model_path, tok=tok)
+        df = benchmark(model_path=model_path, tok=tok, dump=dump)
     else:
         output = pd.read_pickle(pickle)
         dt = load_dataset("UofA-LINGO/text_to_triplets")
