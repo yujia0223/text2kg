@@ -155,7 +155,7 @@ def benchmark(
 
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in tqdm(range(len(dt["test"]))):
+    for i in tqdm(range(len(dt["test"][0:10]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
@@ -166,7 +166,7 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["test"])
+    df = pd.DataFrame(dt["test"][0:10])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
@@ -197,7 +197,8 @@ def get_Cands_and_Refs_from_csv(df):
         # print(triples_cand)
         tmp = []
         for triple in triples_cand:
-            if len(triple.split(' | ')) != 3:
+            #if len(triple.split(' | ')) != 3:
+            if len(triple.split(', ')) != 3:
                 continue
             else:
                 tmp.append(triple)
@@ -210,7 +211,9 @@ def get_Cands_and_Refs_from_csv(df):
         allcandtriples.append(triples_cand)
 
         triples_str_ref = df['gt'].values[i]
-        triples_ref = ast.literal_eval("[" + triples_str_ref + "]")[0]
+        #triples_ref = ast.literal_eval("[" + triples_str_ref + "]")[0]
+        triples_ref = ast.literal_eval(triples_str_ref)[0]
+        
         # for triple in triples:
         #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
         #     newtriples.append(triple_str)
