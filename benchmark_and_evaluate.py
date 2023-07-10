@@ -155,7 +155,7 @@ def benchmark(
 
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in tqdm(range(len(dt["test"][0:10]))):
+    for i in tqdm(range(10)):#(len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
