@@ -1284,8 +1284,12 @@ def main(
     if pickle == "":
         df = benchmark(model_path=model_path, tok=tok)
     else:
-        df = pd.read_pickle(pickle)
-        print(df.head())
+        output = pd.read_pickle(pickle)
+        dt = load_dataset("UofA-LINGO/text_to_triplets")
+        df = pd.DataFrame(dt["train"])
+        df["gt"] = df["response"]
+        df = df.drop(columns=["response"])
+        df["model_output"] = [x[0] for x in output.values()]
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
