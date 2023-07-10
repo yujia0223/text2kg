@@ -1275,12 +1275,17 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
 def main(
     model_path: str = "",
     tok: str = "",
+    pickle: str = "",
     output_path: str = "",
     output_details_path: str = "",
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    df = benchmark(model_path=model_path, tok=tok)
+    if pickle == "":
+        df = benchmark(model_path=model_path, tok=tok)
+    else:
+        df = pd.read_pickle(pickle)
+        print(df.head())
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
