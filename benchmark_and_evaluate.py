@@ -47,6 +47,7 @@ data_files = {"train":"train.csv", "test":"test.csv"}
 def benchmark(
     model_path: str = "",
     tok: str = "",
+    max_tokens: int = 1024,
     dump: str = "output.pickle",
     load_8bit: bool = False,
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
@@ -91,7 +92,7 @@ def benchmark(
         top_p=0.75,
         top_k=40,
         num_beams=4,
-        max_new_tokens=512,
+        max_new_tokens=max_tokens,
         stream_output=False,
         **kwargs,
     ):
@@ -155,7 +156,7 @@ def benchmark(
 
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in tqdm(range(10)):#(len(dt["test"]))):
+    for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
         # print(output[i])
@@ -166,7 +167,7 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["test"][0:10])
+    df = pd.DataFrame(dt["test"])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
@@ -191,9 +192,10 @@ def get_Cands_and_Refs_from_csv(df):
     for i in range(len(df)):
         # newtriples = []
         triples_str_cand = df['model_output'].values[i]
-
+        # print(triples_str_cand)
         # vicuna: for this model
-        triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
+        # triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
+        triples_cand = re.findall(r"\((.*?)\)", triples_str_cand)
         # print(triples_cand)
         tmp = []
         for triple in triples_cand:
@@ -201,8 +203,10 @@ def get_Cands_and_Refs_from_csv(df):
             if len(triple.split(', ')) != 3:
                 continue
             else:
+                triple = triple.replace(', ', ' | ')
                 tmp.append(triple)
         triples_cand = tmp
+        # print(triples_cand)
         # triples_cand = [triple.replace('\\', '').replace(',', '') for triple in triples_cand]
         # triples_cand = ast.literal_eval("[\\" + triples_str_cand + "]")[0]
         # # for triple in triples:
@@ -211,9 +215,11 @@ def get_Cands_and_Refs_from_csv(df):
         allcandtriples.append(triples_cand)
 
         triples_str_ref = df['gt'].values[i]
-        #triples_ref = ast.literal_eval("[" + triples_str_ref + "]")[0]
-        triples_ref = ast.literal_eval(triples_str_ref)[0]
-        
+        triples_ref = ast.literal_eval("[" + triples_str_ref + "]")[0]
+        #triples_ref = ast.literal_eval(triples_str_ref)[0]
+        # print(triples_str_ref)
+        # print(triples_ref)        
+
         # for triple in triples:
         #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
         #     newtriples.append(triple_str)
@@ -785,7 +791,6 @@ def evaluaterefcand(reference, candidate):
         else:
             switchmatchfound = 'n'
 
-
     allrefdict = subjectreflist + predicatereflist + objectreflist
     allcanddict = subjectcandlist + predicatecandlist + objectcandlist
     alltotallist = subjecttotallist + predicatetotallist + objecttotallist
@@ -1279,13 +1284,14 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
 def main(
     model_path: str = "",
     tok: str = "",
+    max_tokens: int = 1024,
     dump: str = "output.pickle",
     output_path: str = "",
     output_details_path: str = "",
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    df = benchmark(model_path=model_path, tok=tok, dump=dump)
+    df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump)
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
