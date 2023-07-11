@@ -192,10 +192,13 @@ def get_Cands_and_Refs_from_csv(df):
     for i in range(len(df)):
         # newtriples = []
         triples_str_cand = df['model_output'].values[i]
+        print(triples_str_cand)
         # print(triples_str_cand)
         # vicuna: for this model
         # triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
-        triples_cand = re.findall(r"\((.*?)\)", triples_str_cand)
+        triples_cand = re.findall(r"\((.*?)\)[<\n]", triples_str_cand)
+        print('\n')
+        print(triples_cand)
         # print(triples_cand)
         tmp = []
         for triple in triples_cand:
@@ -206,6 +209,7 @@ def get_Cands_and_Refs_from_csv(df):
                 triple = triple.replace(', ', ' | ')
                 tmp.append(triple)
         triples_cand = tmp
+        exit(0)
         # print(triples_cand)
         # triples_cand = [triple.replace('\\', '').replace(',', '') for triple in triples_cand]
         # triples_cand = ast.literal_eval("[\\" + triples_str_cand + "]")[0]
@@ -1286,12 +1290,21 @@ def main(
     tok: str = "",
     max_tokens: int = 1024,
     dump: str = "output.pickle",
+    pickle: str = "",
     output_path: str = "",
     output_details_path: str = "",
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump)
+    if pickle == "":
+        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump)
+    else:
+        output = pd.read_pickle(pickle)
+        dt = load_dataset("UofA-LINGO/text_to_triplets")
+        df = pd.DataFrame(dt["test"])
+        df["gt"] = df["response"]
+        df = df.drop(columns=["response"])
+        df["model_output"] = [x[0] for x in output.values()]
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
