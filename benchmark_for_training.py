@@ -191,12 +191,20 @@ def get_Cands_and_Refs_from_csv(df):
     for i in range(len(df)):
         # newtriples = []
         triples_str_cand = df['model_output'].values[i]
-
         # vicuna: for this model
-        triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
-        # print(triples_cand)
+        exp_target = "Therefore, here is the answer in the correct format:"
+        # Check for explanation-based model:
+        if triples_str_cand.find(exp_target) == -1:
+            print("Found one with diff final answer prompt.")
+            #print(i)
+        else:
+            # Only look at final output triples.
+            triples_str_cand = triples_str_cand[triples_str_cand.find(exp_target)+len(exp_target):].strip()
+        # This looks for the form of '...|...|...', which we expect our triples to be in.
+        triples_cand = re.findall(r"'(.*?[|].*?[|].*?)'", triples_str_cand)
         tmp = []
         for triple in triples_cand:
+            triple = triple.strip('[\'')
             if len(triple.split(' | ')) != 3:
                 continue
             else:
@@ -251,7 +259,6 @@ def get_Cands_and_Refs_from_csv(df):
                 newtriple = ' | '.join(adjusttriple)
             newtriples.append(newtriple)
         newreflist.append(newtriples)
-
     return allcand_ids, all_text, allcandtriples, newcandlist, allreftriples, newreflist
 
 def getRefs(filepath, allcand_ids):
@@ -440,6 +447,8 @@ def nonrefwords(newreflist, newcandlist, foundnum, ngramlength):
                 except:
                     newcandindex = []
                     print(findnewcand)
+                    print(newcandlist)
+                    print(newreflist)
                     print(ngram)
                 # Change the matched words to FOUNDCAND-[FOUNDNUMBER]-[REFERENCE-FOUNDINDEX]
                 for idx, val in enumerate(newcandindex):
