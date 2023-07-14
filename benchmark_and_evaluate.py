@@ -460,11 +460,11 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
     try:
         #If some match is found with the reference
         first_found_idx = new_cand_list.index([i for i in new_cand_list if re.findall(r'^FOUNDCAND', i)][0])
-        candidate_found = 'y'
+        candidate_found = True
     except IndexError:
-        candidate_found = 'n'
+        candidate_found = False
 
-    if candidate_found == 'y':
+    if candidate_found:
         unlinked_list = []
         before_list = []
         after_list = []
@@ -472,13 +472,13 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
         #If the first found candidate match is also the first word in the reference
         if new_cand_list[first_found_idx].endswith('-0'):
             #Flag that some words can appear before the first match, and they are linked with the first candidate match
-            before_linked = 'y'
+            before_linked = True
             first_cand = re.search(r'^(FOUNDCAND-\d+)-', new_cand_list[first_found_idx]).group(1)
         else:
-            before_linked = 'n'
+            before_linked = False
 
         last_found_idx = None
-        after_linked = None
+        after_linked = False
         #If there's more words after the last reference, link those to the last reference as well
         #If the last reference word is linked, but the last candidate word is not, one criterion of linking the last words is met
         if (new_ref_list[-1].startswith('FOUNDREF')) and (not new_cand_list[-1].startswith('FOUNDCAND')):
@@ -487,7 +487,7 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
             cand_version = new_ref_list[-1].replace('FOUNDREF', 'FOUNDCAND')
             if last_found == cand_version:
                 last_found_idx = new_cand_list.index([i for i in new_cand_list if re.findall(r'^FOUNDCAND', i)][-1])
-                after_linked = 'y'
+                after_linked = True
                 last_cand = re.search(r'^(FOUNDCAND-\d+)-', last_found).group(1)
 
 
@@ -495,10 +495,10 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
         unlink_number = 1
         for idx, can in enumerate(new_cand_list):
             if not can.startswith('FOUNDCAND'):
-                if (idx < first_found_idx) and (before_linked == 'y'):
+                if (idx < first_found_idx) and before_linked:
                     new_cand_list[idx] = first_cand + '-LINKED'
                     before_list.append(first_cand + '-LINKED')
-                elif (last_found_idx != None) and (after_linked != None) and (idx > last_found_idx) and (after_linked == 'y'):
+                elif (last_found_idx != None) and (idx > last_found_idx) and after_linked:
                     new_cand_list[idx] = last_cand + '-LINKED'
                     after_list.append(last_cand + '-LINKED')
                 else:
@@ -519,10 +519,10 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
         current_candidate = ''
         beginidx = ''
         endidx = ''
-        collecting = 'n'
+        collecting = False
         for idx, candidate in enumerate(total_list2):
             if (candidate.startswith('FOUNDCAND')) or (candidate.startswith('NOTFOUND')):
-                collecting = 'y'
+                collecting = True
                 curcan = re.search(r'^((.*?)-\d+)', candidate).group(1)
                 if curcan != current_candidate:
                     if current_candidate != '':
@@ -535,7 +535,7 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
                     endidx = idx
                     cand_dict_list.append({'label': triple_type_cand, 'start': baseidx + beginidx, 'end': baseidx + endidx})
             else:
-                if collecting == 'y':
+                if collecting:
                     endidx = idx-1
                     cand_dict_list.append({'label': triple_type_cand, 'start': baseidx + beginidx, 'end': baseidx + endidx})
 
@@ -579,9 +579,9 @@ def evaluateRefCand(reference, candidate):
     object_ref_list = None
     object_cand_list = None
     object_total_list = None
-    subject_found = ''
-    predicate_found = ''
-    object_found = ''
+    subject_found = False
+    predicate_found = False
+    object_found = False
 
     for idx, attrib in enumerate(indextriple):
         #Let's go over each attribute of the triple one by one
@@ -621,7 +621,7 @@ def evaluateRefCand(reference, candidate):
     switch_match_found = False
     #If no matches were found for two or more attributes, we are going to try and compare different attributes to each other.
     #First let's try to match the candidate subject and reference object (and vice versa)
-    if (subject_found == 'n') and (object_found == 'n'):
+    if not subject_found and not object_found:
         refsub = new_ref[0]
         candsub = new_cand[2]
 
@@ -656,7 +656,7 @@ def evaluateRefCand(reference, candidate):
         candidate_found2, ref_dict_list2, cand_dict_list2, total_list2 = getRefDict(new_ref_list, new_cand_list, 'OBJ', 'SUB', len(total_list) + len(predicate_total_list))
 
         # subject_found is based in reference 
-        if (candidate_found == 'y') or (candidate_found2 == 'y'):
+        if candidate_found or candidate_found2:
             subject_found = candidate_found
             subject_ref_list = ref_dict_list.copy()
             subject_cand_list = cand_dict_list.copy()
@@ -694,7 +694,7 @@ def evaluateRefCand(reference, candidate):
             switch_match_found = False
 
     # Then, let's try to switch subject and predicate
-    if ((subject_found == 'n') and (predicate_found == 'n')) and not switch_match_found:
+    if (not subject_found and not predicate_found) and not switch_match_found:
         refsub = new_ref[0]
         candsub = new_cand[1]
 
@@ -729,7 +729,7 @@ def evaluateRefCand(reference, candidate):
 
         candidate_found2, ref_dict_list2, cand_dict_list2, total_list2 = getRefDict(new_ref_list, new_cand_list, 'PRED', 'SUB', len(total_list))
 
-        if (candidate_found == 'y') or (candidate_found2 == 'y'):
+        if candidate_found or candidate_found2:
             subject_found = candidate_found
             subject_ref_list = ref_dict_list.copy()
             subject_cand_list = cand_dict_list.copy()
@@ -743,7 +743,7 @@ def evaluateRefCand(reference, candidate):
             switch_match_found = False
 
     # Finally, let's try to switch predicate and object
-    if ((predicate_found == 'n') and (object_found == 'n')) and not switch_match_found:
+    if (not predicate_found and not object_found) and not switch_match_found:
         refsub = new_ref[1]
         candsub = new_cand[2]
 
@@ -778,7 +778,7 @@ def evaluateRefCand(reference, candidate):
 
         candidate_found2, ref_dict_list2, cand_dict_list2, total_list2 = getRefDict(new_ref_list, new_cand_list, 'OBJ', 'PRED', len(subject_total_list) + len(total_list))
 
-        if (candidate_found == 'y') or (candidate_found2 == 'y'):
+        if candidate_found or candidate_found2:
             predicate_found = candidate_found
             predicate_ref_list = ref_dict_list.copy()
             predicate_cand_list = cand_dict_list.copy()
@@ -1252,9 +1252,6 @@ def calculateExactTripleScore(ref_list, cand_list, all_dict):
     return all_dict
 
 def evaluate(input_dataframe, outputfile_overall, outputfile_details):
-    # allcand_ids, all_text, cand_list, new_cand_list = getCandsFromRebelTsv(candfile)
-    # ref_list, new_ref_list = getRefs(reffile, allcand_ids)
-    # cand_list, new_cand_list = getCands(candfile)
     allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list = getCandsAndRefsFromCsv(input_dataframe)
     starting_time = timeit.default_timer()
     print("Start time :",starting_time)
@@ -1269,7 +1266,6 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
         json.dump(all_dict2, outfile)
 
     all = {}
-    # all['id'] = list(allcand_ids)
     all['id'] = allcand_ids.tolist()
     all['text'] = list(all_text)
     all['ref'] = all_ref_triples
@@ -1277,7 +1273,6 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     all['triple_score'] = triple_score
     all['combination'] = combination_selected
     all['triple_score_sum'] = triple_score_sum
-    # print(all)
     with open(outputfile_details, 'w') as outfile:
         json.dump(all, outfile)
 
