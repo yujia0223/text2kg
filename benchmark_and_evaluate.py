@@ -5,6 +5,7 @@ from datasets import load_dataset
 import fire
 import torch
 import transformers
+import csv
 from transformers import LlamaForCausalLM, LlamaTokenizer, GenerationConfig
 import pickle
 # alpaca-lora utils
@@ -191,21 +192,47 @@ def getCandsAndRefsFromCsv(df):
     all_ref_triples = []
     for i in range(len(df)):
         triples_str_cand = df['model_output'].values[i]
-        print(triples_str_cand)
+        #DEBUG: print(triples_str_cand)
         # Remove EOS token
         triples_str_cand = triples_str_cand.replace('</s>', '')
 
         #triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
         #triples_cand = re.findall(r"\((.*?)\)[<\n]", triples_str_cand)
-        triples_cand = triples_str_cand.strip().split('\n')
-        print('\n')
-        print(triples_cand)
+
+        # New style triples
+        # triples_cand = triples_str_cand.strip().split('\n')
+
+        #DEBUG: print('\n')
+        #DEBUG: print(triples_cand)
+
+        # Old style triples
+        exp_target = "Therefore, here is the answer in the correct format:"
+        # Check for explanation-based model:
+        if triples_str_cand.find(exp_target) == -1:
+            print("Found one with diff final answer prompt.")
+        else:
+            # Only look at final output triples.
+            triples_str_cand = triples_str_cand[triples_str_cand.find(exp_target)+len(exp_target):].strip()
+        # This looks for the form of '...|...|...', which we expect our triples to be in. This must be followed
+        # with a closing square bracket or comma to match to avoid edge cases such as the one below:
+        # ['prop's | pred | value's'] would match to -> ['s | pred | value'] without the [],].
+        triples_cand_tmp = re.findall(r"'(.*?[|].*?[|].*?)'[],]", triples_str_cand)
+        triples_cand = []
+        for triple in triples_cand_tmp:
+            triple = triple.split(' | ')
+            triples_cand.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
 
         tmp = []
         for triple in triples_cand:
             # Do not penalize the model for errors in splitting that cause empty strings
             if triple == '':
                 continue
+            # To prevent index errors later, pad incomplete triples with empty strings.
+            if len(triple.split(', ')) < 3:
+                if len(triple.split(', ')) == 1:
+                    triple += ', , )'
+                elif len(triple.split(', ')) == 2:
+                    triple += ', )'
             else:
                 tmp.append(triple)
         all_cand_triples.append(tmp)
@@ -216,8 +243,8 @@ def getCandsAndRefsFromCsv(df):
         for triple in ast.literal_eval("[" + triples_str_ref + "]")[0]:
             triple = triple.split(' | ')
             triples_ref.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
-        print(triples_str_ref)
-        print(triples_ref)
+        #DEBUG: print(triples_str_ref)
+        #DEBUG: print(triples_ref)
         all_ref_triples.append(triples_ref)
 
     new_cand_list = []
@@ -243,7 +270,7 @@ def getCandsAndRefsFromCsv(df):
             #     new_triple = ' | '.join(adjusttriple)
             new_triples.append(new_triple)
         new_cand_list.append(new_triples)
-    print(new_cand_list)
+    #DEBUG: print(new_cand_list)
 
     new_ref_list = []
     for entry in all_ref_triples:
@@ -420,6 +447,7 @@ def getCands(filepath):
 
 def findSubList(sl,l):
     sll=len(sl)
+    #DEBUG: print([i for i,e in enumerate(l) if e==sl[0]])
     for ind in (i for i,e in enumerate(l) if e==sl[0]):
         if l[ind:ind+sll]==sl:
             return ind,ind+sll-1
@@ -430,11 +458,13 @@ def nonRefWords(new_ref_list, new_cand_list, foundnum, ngram_length):
     while ngram_length > 0:
         #Get a list of all the ngrams of that size
         ngram_list = list(ngrams(new_cand_list, ngram_length))
+        #DEBUG: print("Ngram:", ngram_list)
         for ngram in ngram_list:
             #If we find this ngram (in the same order) in the reference
-            if findSubList(list(ngram), new_ref_list) is not None:
-                #We're getting the start and end index of the ngram in the reference
-                find_new_ref = findSubList(list(ngram), new_ref_list)
+            #We're getting the start and end index of the ngram in the reference
+            find_new_ref = findSubList(list(ngram), new_ref_list)
+            if find_new_ref is not None:
+                #DEBUG: print("find_new_ref:", find_new_ref)
                 #And all the numbers in between
                 new_ref_index = list(range(find_new_ref[0], find_new_ref[1] + 1))
                 #Change the matched words to FOUNDREF-[FOUNDNUMBER]-[FOUNDINDEX]
@@ -557,17 +587,94 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
     return candidate_found, ref_dict_list, cand_dict_list, total_list
 
 def evaluateRefCand(reference, candidate):
-    new_ref = reference.split(' | ')
-    new_cand = candidate.split(' | ')
+    new_ref = reference.split(', ')
+    new_cand = candidate.split(', ')
+    #DEBUG: print("Ref:", new_ref)
+    #DEBUG: print("Cand:", new_cand)
 
-    #Make sure that reference or candidate aren't '' values originally.
+    # Check if triples got split inside a literal value
+    # IDEA: Just reconstruct the portion of the list that is a literal that got split.
+    # Check for unmatched quotes
+    if len(new_ref) > 3:
+        if new_ref[0].strip('(').strip(')')[0] == '\"' and new_ref[0].strip('(').strip(')')[-1] != '\"':
+            rep_ref = []
+            end = 0
+            for i in range(1, len(new_ref)):
+                new_ref[i] = new_ref[i].strip('\'')
+                if new_ref[i].strip('(').strip(')')[-1] == '\"':
+                    end = i
+            rep_ref.append(", ".join(f'{w.strip("[").strip("]")}' for w in (new_ref[0:end+1])))
+            rep_ref.append(new_ref[-2])
+            rep_ref.append(new_ref[-1])
+            new_ref = rep_ref
+        if new_ref[1].strip('(').strip(')')[0] == '\"' and new_ref[1].strip('(').strip(')')[-1] != '\"':
+            rep_ref = []
+            rep_ref.append(new_ref[0])
+            end = 0
+            for i in range(1, len(new_ref)):
+                new_ref[i] = new_ref[i].strip('\'')
+                if new_ref[i].strip('(').strip(')')[-1] == '\"':
+                    end = i
+            rep_ref.append(", ".join(f'{w.strip("[").strip("]")}' for w in (new_ref[1:end+1])))
+            rep_ref.append(new_ref[-1])
+            new_ref = rep_ref
+        if new_ref[2].strip('(').strip(')')[0] == '\"' and new_ref[2].strip('(').strip(')')[-1] != '\"':
+            rep_ref = []
+            rep_ref.append(new_ref[0])
+            rep_ref.append(new_ref[1])
+            end = 0
+            for i in range(2, len(new_ref)):
+                new_ref[i] = new_ref[i].strip('\'')
+                if new_ref[i].strip('(').strip(')')[-1] == '\"':
+                    end = i
+            rep_ref.append(", ".join(f'{w.strip("[").strip("]")}' for w in (new_ref[2:end+1])))
+            new_ref = rep_ref
+    
+    if len(new_cand) > 3:
+        if new_cand[0].strip('(').strip(')')[0] == '\"' and new_cand[0].strip('(').strip(')')[-1] != '\"':
+            rep_cand = []
+            end = 0
+            for i in range(1, len(new_cand)):
+                new_cand[i] = new_cand[i].strip('\'')
+                if new_cand[i][-1].strip('(').strip(')') == '\"':
+                    end = i
+            rep_cand.append(", ".join(f'{w.strip("[").strip("]")}' for w in (new_cand[0:end+1])))
+            rep_cand.append(new_cand[-2])
+            rep_cand.append(new_cand[-1])
+            new_cand = rep_cand
+        if new_cand[1].strip('(').strip(')')[0] == '\"' and new_cand[1].strip('(').strip(')')[-1] != '\"':
+            rep_cand = []
+            rep_cand.append(new_cand[0])
+            end = 0
+            for i in range(1, len(new_cand)):
+                new_cand[i] = new_cand[i].strip('\'')
+                if new_cand[i][-1].strip('(').strip(')') == '\"':
+                    end = i
+            rep_cand.append(", ".join(f'{w.strip("[").strip("]")}' for w in (new_cand[1:end+1])))
+            rep_cand.append(new_cand[-1])
+            new_cand = rep_cand
+        if new_cand[2].strip('(').strip(')')[0] == '\"' and new_cand[2].strip('(').strip(')')[-1] != '\"':
+            rep_cand = []
+            rep_cand.append(new_cand[0])
+            rep_cand.append(new_cand[1])
+            end = 0
+            for i in range(1, len(new_cand)):
+                new_cand[i] = new_cand[i].strip('\'')
+                if new_cand[i][-1].strip('(').strip(')') == '\"':
+                    end = i
+            rep_cand.append(", ".join(f'{w.strip("[").strip("]")}' for w in (new_cand[2:end+1])))
+            new_cand = rep_cand
+
+
+
+    # Make sure that reference or candidate aren't '' values originally.
     if (len(new_ref) > 1) and (len(new_cand) > 1):
-        indextriple = new_ref
+        index_triple = new_ref
     elif (len(new_ref) == 1) :
-        indextriple = new_cand
+        index_triple = new_cand
         new_ref = ['', '', '']
     else:
-        indextriple = new_ref
+        index_triple = new_ref
         new_cand = ['', '', '']
 
     subject_ref_list = None
@@ -583,20 +690,31 @@ def evaluateRefCand(reference, candidate):
     predicate_found = False
     object_found = False
 
-    for idx, attrib in enumerate(indextriple):
+    for idx, attrib in enumerate(index_triple):
         #Let's go over each attribute of the triple one by one
-        refsub = new_ref[idx]
-        candsub = new_cand[idx]
+        try:
+            refsub = new_ref[idx]
+            candsub = new_cand[idx]
+        except IndexError as i:
+            print(i)
+            print("idx:",idx)
+            print("refsub:",refsub)
+            print("candsub:",candsub)
+            print("reflist:",new_ref,len(new_ref))
+            print("candlist:",new_cand,len(new_cand))
+            exit(0)
 
         ref_list = nltk.word_tokenize(refsub)
         cand_list = nltk.word_tokenize(candsub)
 
         ref_list = [x.lower() for x in ref_list if re.search(r'^[' + re.escape(string.punctuation) + r']+$', x) == None]
         cand_list = [x.lower() for x in cand_list if re.search(r'^[' + re.escape(string.punctuation) + r']+$', x) == None]
+        #DEBUG: print("Ref List:", ref_list)
+        #DEBUG: print("Cand List:", cand_list)
 
         new_ref_list = ref_list.copy()
         new_cand_list = cand_list.copy()
-        #Start with an ngram the full number of words in the reference
+        # Start with an ngram the full number of words in the reference
         ngram_length = len(new_cand_list)
         new_ref_list, new_cand_list = nonRefWords(new_ref_list, new_cand_list, 1, ngram_length)
         if idx == 0:
@@ -804,20 +922,23 @@ def evaluateRefCand(reference, candidate):
     return results, results_per_tag
 
 def calculateAllScores(new_ref_list, new_cand_list):
+    #DEBUG: print(new_ref_list)
+    #DEBUG: print(new_cand_list)
     total_sem_eval_list = []
     total_sem_eval_list_per_tag = []
 
     for idx, candidate in enumerate(new_cand_list):
         print('evaluating candidate ' + str(idx) + ' of ' + str(len(new_cand_list)))
+        # Ensure list lengths are equal, pad with empty strings.
         if len(new_cand_list[idx]) != len(new_ref_list[idx]):
             difference_between = abs(len(new_cand_list[idx]) - len(new_ref_list[idx]))
             difference_list = [''] * difference_between
-            print(difference_list)
             if len(new_cand_list[idx]) < len(new_ref_list[idx]):
                 new_cand_list[idx] = new_cand_list[idx] + difference_list
             else:
                 new_ref_list[idx] = new_ref_list[idx] + difference_list
 
+    # Evaluate every triple against each reference triple
     for idx, candidate in enumerate(new_cand_list):
         candidate_sem_eval = []
         candidate_sem_eval_per_tag = []
@@ -911,14 +1032,14 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
 
         #     # If the combination is the highest score thus far, or the first score, make it the total_dict
         #     if (combi_score > total_dict['totalscore']) or (len(total_dict) == 1):
-        #         total_dict = {'totalscore': combi_score, 'combination': combination, 'semevallist': collected_sem_eval,
-        #                      'semevalpertaglist': collected_sem_eval_per_tag}
-        # triple_score.append(total_dict['semevallist'])
+        #         total_dict = {'totalscore': combi_score, 'combination': combination, 'sem_eval_list': collected_sem_eval,
+        #                      'sem_eval_per_tag_list': collected_sem_eval_per_tag}
+        # triple_score.append(total_dict['sem_eval_list'])
         # combination_selected.append(total_dict['combination'])
-        # ent_type_dict = sumAllCombination(total_dict['semevallist'])
+        # ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
         # triple_score_sum.append(ent_type_dict)
-        # selected_sem_eval_list = selected_sem_eval_list + total_dict['semevallist']
-        # selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['semevalpertaglist']
+        # selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        # selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
         collected_sem_eval = []
         collected_sem_eval_per_tag = []
         collected_combinations = []
@@ -941,15 +1062,14 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
             collected_sem_eval.append(total_sem_eval_list[idx][selected_combination[0]][selected_combination[1]])
             collected_sem_eval_per_tag.append(total_sem_eval_list_per_tag[idx][selected_combination[0]][selected_combination[1]])
             combi_score = f1_score
-            total_dict = {'totalscore': combi_score, 'combination': collected_combinations, 'semevallist': collected_sem_eval,
-                        'semevalpertaglist': collected_sem_eval_per_tag}
-
-        triple_score.append(total_dict['semevallist'])
+            total_dict = {'totalscore': combi_score, 'combination': collected_combinations, 'sem_eval_list': collected_sem_eval,
+                        'sem_eval_per_tag_list': collected_sem_eval_per_tag}
+        triple_score.append(total_dict['sem_eval_list'])
         combination_selected.append(total_dict['combination'])
-        ent_type_dict = sumAllCombination(total_dict['semevallist'])
+        ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
         triple_score_sum.append(ent_type_dict)
-        selected_sem_eval_list = selected_sem_eval_list + total_dict['semevallist']
-        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['semevalpertaglist']
+        selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
 
     all_dict = {}
     all_dict.update({'Total_scores': {}})
@@ -1255,9 +1375,11 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list = getCandsAndRefsFromCsv(input_dataframe)
     starting_time = timeit.default_timer()
     print("Start time :",starting_time)
+    # For each entry, calculate ALL possible scores for every combination of candidate and reference triple
     total_sem_eval_list, total_sem_eval_list_per_tag = calculateAllScores(new_ref_list, new_cand_list)
     function1_time = timeit.default_timer() 
     print("calculate all score time :", function1_time - starting_time)
+    # Get best score for each entry (essentially, try to pick the one that actually matched up the triples correctly)
     all_dict, triple_score, combination_selected, triple_score_sum = calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_ref_list, new_cand_list)
     function2_time = timeit.default_timer() 
     print("calculate all score time :", function2_time - function1_time)
@@ -1292,11 +1414,11 @@ def main(
     else:
         output = pd.read_pickle(pickle)
         dt = load_dataset("UofA-LINGO/text_to_triplets")
-        df = pd.DataFrame(dt["test"])
+        df = pd.DataFrame(dt["train"])
         df["gt"] = df["response"]
         df = df.drop(columns=["response"])
         df["model_output"] = [x[0] for x in output.values()]
-        df = df.drop([i for i in range(2,len(df))])
+        #df = df.drop([i for i in range(2,len(df))])
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
