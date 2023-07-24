@@ -3,7 +3,6 @@ from datasets import load_dataset
 import pandas as pd
 
 def main(
-    model_path: str = "",
     data_path: str = "",
     val_set_size: int = 0
 ):
@@ -18,14 +17,17 @@ def main(
     train_val = data["train"].train_test_split(
         test_size=val_set_size, shuffle=True, seed=42
     )
-    train_data = (
-        train_val["train"].shuffle().map(generate_prompt)
-    )
-    val_data = (
-        train_val["test"].shuffle().map(generate_prompt)
-    )
-    print(type(train_data))
-    print(type(val_data))
+    train_data = []
+    for data in train_val['train'].shuffle():
+        train_data.append(generate_prompt(data))
+    val_data = []
+    for data in train_val['test'].shuffle():
+        val_data.append(generate_prompt(data))
+    train_data = pd.DataFrame(train_data, columns=['text'])
+    val_data = pd.DataFrame(val_data, columns=['text'])
+    print(train_data.head())
+    print(val_data.head())
+
 
 if __name__ == "__main__":
     fire.Fire(main)
