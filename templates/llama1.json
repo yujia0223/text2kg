@@ -1,0 +1,6 @@
+{
+    "description": "Template used by Llama-2.",
+    "prompt_input": "<|system|>You are an AI assistant who is an expert in knowledge graphs. You will be given an instruction and text. Generate a response to appropriately complete the instruction's request.</s>\n<|prompter|>{instruction}\n{input}</s>\n<|assistant|>",
+    "prompt_no_input": "<|system|>You are an AI assistant who is an expert in knowledge graphs. You will be given an instruction and text. Generate a response to appropriately complete the instruction's request.</s>\n<|prompter|>{instruction}\n{input}</s>\n<|assistant|>",
+    "response_split": "<|assistant|>"    
+}
