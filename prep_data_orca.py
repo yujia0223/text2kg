@@ -6,11 +6,10 @@ def main(
     data_path: str = "",
     val_set_size: int = 0
 ):
-    system_prompt = "You are an AI assistant who is an expert in knowledge graphs. You will be given an instruction and text. Generate a response to appropriately complete the instruction's request."
-    #prompt1 = "<|system|>{system_prompt}</s>\n<|prompter|>{instruction}\n{input}</s>\n<|assistant|>{response}"
-    prompt2 = "<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{instruction}\n\n{input} [/INST]\n"
+    # From https://huggingface.co/psmathur/orca_mini_v2_7b
+    prompt = "### System:\nBelow is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### User:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n"
     def generate_prompt(data_point):
-        res = prompt2.format(system_prompt = system_prompt, instruction=data_point["instruction"], input=data_point["input"])
+        res = prompt.format(instruction=data_point["instruction"], input=data_point["input"])
         res = f"{res}{data_point['output']}"
         return res
 
