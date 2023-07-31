@@ -156,22 +156,24 @@ def benchmark(
         output = tokenizer.decode(s)
         yield prompter.get_response(output)
 
-    dt = load_dataset("UofA-LINGO/text_to_triplets")
+    # dt = load_dataset("UofA-LINGO/text_to_triplets")
+    dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
     output = {}
-    for i in tqdm(range(0,25)):#len(dt["test"]))):
+    for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
-        output[i] = list(evaluate(entry["instruction"], entry["context"]))
-        print(output[i])
+        output[i] = list(evaluate(entry["instruction"], entry["input"]))
+        #print(output[i])
     
     with open(dump, "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
-    dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["test"][0:25])
-    df["gt"] = df["response"]
-    df = df.drop(columns=["response"])
+    # dt = load_dataset("UofA-LINGO/text_to_triplets")
+    dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+    df = pd.DataFrame(dt["test"])
+    df["gt"] = df["output"]
+    df = df.drop(columns=["output"])
     df["model_output"] = [x[0] for x in output.values()]
     return df
     #df.to_csv("vicuna-7b-with-explanasion-correct.csv", index=False)
@@ -187,7 +189,7 @@ def getCandsAndRefsFromCsv(df):
     print(df.head())
 
     allcand_ids = df.index.values
-    all_text = df['context'].values
+    all_text = df['input'].values
 
     all_cand_triples = []
     all_ref_triples = []
@@ -229,31 +231,30 @@ def getCandsAndRefsFromCsv(df):
             if triple == '':
                 continue
             # To prevent index errors later, pad incomplete triples with empty strings.
-            if len(triple.split(', ')) < 3:
-                if len(triple.split(', ')) == 1:
-                    triple += ', , )'
-                elif len(triple.split(', ')) == 2:
-                    triple += ', )'
-            if len(triple.split(', ')) > 3:
+            if len(triple.split(' | ')) < 3:
+                if len(triple.split(' | ')) == 1:
+                    triple += ' |  | )'
+                elif len(triple.split(' | ')) == 2:
+                    triple += ' | )'
+            if len(triple.split(' | ')) > 3:
                 print(triple)
-                print(triple.split(', '))
+                print(triple.split(' | '))
             else:
                 tmp.append(triple)
         all_cand_triples.append(tmp)
 
         triples_str_ref = df['gt'].values[i]
-        triples_ref = []
+        triples_ref = triples_str_ref.split('\n')
         # Convert triples to new format, easier to compare later on than converting the other way
-        for triple in ast.literal_eval("[" + triples_str_ref + "]")[0]:
-            triple = triple.split(' | ')
-            triples_ref.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
+        # for triple in ast.literal_eval("[" + triples_str_ref + "]")[0]:
+        #     triple = triple.split(' | ')
+        #     triples_ref.append(f'({triple[0]} | {triple[1]} | {triple[2]})')
         #DEBUG: print(triples_str_ref)
         #DEBUG: print(triples_ref)
         all_ref_triples.append(triples_ref)
 
     new_cand_list = []
     
-    # This breaks our candidates
     for entry in all_cand_triples:
         new_triples = []
         for triple in entry:
@@ -1418,12 +1419,12 @@ def main(
         df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template)
     else:
         output = pd.read_pickle(pickle)
-        dt = load_dataset("UofA-LINGO/text_to_triplets")
+        # dt = load_dataset("UofA-LINGO/text_to_triplets")
+        dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
         df = pd.DataFrame(dt["test"])
-        df["gt"] = df["response"]
-        df = df.drop(columns=["response"])
+        df["gt"] = df["output"]
+        df = df.drop(columns=["output"])
         df["model_output"] = [x[0] for x in output.values()]
-        #df = df.drop([i for i in range(2,len(df))])
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
