@@ -41,10 +41,6 @@ import timeit
 device = "cuda"
 currentpath = os.getcwd()
 
-#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-# TSadler: For copied dataset
-data_files = {"train":"train.csv", "test":"test.csv"}
-
 def benchmark(
     model_path: str = "",
     tok: str = "",
@@ -98,6 +94,7 @@ def benchmark(
         **kwargs,
     ):
         prompt = prompter.generate_prompt(instruction, input)
+        print(prompt)
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].to(device)
         generation_config = GenerationConfig(
@@ -107,6 +104,8 @@ def benchmark(
             num_beams=num_beams,
             **kwargs,
         )
+        
+        eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s><|system|>")[-1], tokenizer.encode("<s>")[-1], tokenizer.encode("<|system|>")[-1], tokenizer.encode("<s>[INST]")[-1], tokenizer.encode("<<SYS>>")[-1], tokenizer.encode(")<")[-1]]
 
         generate_params = {
             "input_ids": input_ids,
@@ -114,6 +113,7 @@ def benchmark(
             "return_dict_in_generate": True,
             "output_scores": True,
             "max_new_tokens": max_new_tokens,
+            "eos_token_id": eos_tokens,
         }
 
         if stream_output:
@@ -150,6 +150,7 @@ def benchmark(
                 return_dict_in_generate=True,
                 output_scores=True,
                 max_new_tokens=max_new_tokens,
+                eos_token_id=eos_tokens,
             )
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
@@ -157,10 +158,10 @@ def benchmark(
 
     dt = load_dataset("UofA-LINGO/text_to_triplets")
     output = {}
-    for i in tqdm(range(len(dt["test"]))):
+    for i in tqdm(range(0,25)):#len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["context"]))
-        # print(output[i])
+        print(output[i])
     
     with open(dump, "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -168,7 +169,7 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     dt = load_dataset("UofA-LINGO/text_to_triplets")
-    df = pd.DataFrame(dt["test"])
+    df = pd.DataFrame(dt["test"][0:25])
     df["gt"] = df["response"]
     df = df.drop(columns=["response"])
     df["model_output"] = [x[0] for x in output.values()]
@@ -200,27 +201,27 @@ def getCandsAndRefsFromCsv(df):
         #triples_cand = re.findall(r"\((.*?)\)[<\n]", triples_str_cand)
 
         # New style triples
-        # triples_cand = triples_str_cand.strip().split('\n')
+        triples_cand = triples_str_cand.strip().split('\n')
 
         #DEBUG: print('\n')
         #DEBUG: print(triples_cand)
 
         # Old style triples
-        exp_target = "Therefore, here is the answer in the correct format:"
+        # exp_target = "Therefore, here is the answer in the correct format:"
         # Check for explanation-based model:
-        if triples_str_cand.find(exp_target) == -1:
-            print("Found one with diff final answer prompt.")
-        else:
+        # if triples_str_cand.find(exp_target) == -1:
+        #     print("Found one with diff final answer prompt.")
+        # else:
             # Only look at final output triples.
-            triples_str_cand = triples_str_cand[triples_str_cand.find(exp_target)+len(exp_target):].strip()
+        #     triples_str_cand = triples_str_cand[triples_str_cand.find(exp_target)+len(exp_target):].strip()
         # This looks for the form of '...|...|...', which we expect our triples to be in. This must be followed
         # with a closing square bracket or comma to match to avoid edge cases such as the one below:
         # ['prop's | pred | value's'] would match to -> ['s | pred | value'] without the [],].
-        triples_cand_tmp = re.findall(r"'(.*?[|].*?[|].*?)'[],]", triples_str_cand)
-        triples_cand = []
-        for triple in triples_cand_tmp:
-            triple = triple.split(' | ')
-            triples_cand.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
+        # triples_cand_tmp = re.findall(r"'(.*?[|].*?[|].*?)'[],]", triples_str_cand)
+        # triples_cand = []
+        # for triple in triples_cand_tmp:
+        #     triple = triple.split(' | ')
+        #     triples_cand.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
 
         tmp = []
         for triple in triples_cand:
@@ -233,6 +234,9 @@ def getCandsAndRefsFromCsv(df):
                     triple += ', , )'
                 elif len(triple.split(', ')) == 2:
                     triple += ', )'
+            if len(triple.split(', ')) > 3:
+                print(triple)
+                print(triple.split(', '))
             else:
                 tmp.append(triple)
         all_cand_triples.append(tmp)
@@ -587,8 +591,8 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
     return candidate_found, ref_dict_list, cand_dict_list, total_list
 
 def evaluateRefCand(reference, candidate):
-    new_ref = reference.split(', ')
-    new_cand = candidate.split(', ')
+    new_ref = reference.split(' | ')
+    new_cand = candidate.split(' | ')
     #DEBUG: print("Ref:", new_ref)
     #DEBUG: print("Cand:", new_cand)
 
@@ -928,7 +932,7 @@ def calculateAllScores(new_ref_list, new_cand_list):
     total_sem_eval_list_per_tag = []
 
     for idx, candidate in enumerate(new_cand_list):
-        print('evaluating candidate ' + str(idx) + ' of ' + str(len(new_cand_list)))
+        #print('evaluating candidate ' + str(idx) + ' of ' + str(len(new_cand_list)))
         # Ensure list lengths are equal, pad with empty strings.
         if len(new_cand_list[idx]) != len(new_ref_list[idx]):
             difference_between = abs(len(new_cand_list[idx]) - len(new_ref_list[idx]))
@@ -990,7 +994,7 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     # Get all the permutations of the number of scores given per candidate, so if there's 4 candidates, but 3 references, this part ensures that one of
     # The four will not be scored
     for idx, candidate in enumerate(new_cand_list):
-        print('calculating system score for candidate ' + str(idx) + ' of ' + str(len(new_cand_list)))
+        #print('calculating system score for candidate ' + str(idx) + ' of ' + str(len(new_cand_list)))
         # if len(new_cand_list[idx]) > len(new_ref_list[idx]):
         #     # Get all permutations
         #     choosecands = list(itertools.permutations([x[0] for x in enumerate(total_sem_eval_list[idx])], len(total_sem_eval_list[idx][0])))
@@ -1401,6 +1405,7 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
 def main(
     model_path: str = "",
     tok: str = "",
+    prompt_template: str = "",
     max_tokens: int = 1024,
     dump: str = "output.pickle",
     pickle: str = "",
@@ -1410,11 +1415,11 @@ def main(
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
     if pickle == "":
-        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump)
+        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template)
     else:
         output = pd.read_pickle(pickle)
         dt = load_dataset("UofA-LINGO/text_to_triplets")
-        df = pd.DataFrame(dt["train"])
+        df = pd.DataFrame(dt["test"])
         df["gt"] = df["response"]
         df = df.drop(columns=["response"])
         df["model_output"] = [x[0] for x in output.values()]

@@ -21,10 +21,10 @@ def main(
 ):
     prompter = Prompter(prompt_template)
     # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
-    tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
-
+    #tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
+    tokenizer = LlamaTokenizer.from_pretrained("/home2/tsadler/models/Llama-2-7b-rf-at-prompt1")
     model = LlamaForCausalLM.from_pretrained(
-        "/home/tsadler/models/lora-vicuna-7b-explanations/hf_ckpt",
+        "/home2/tsadler/models/Llama-2-7b-rf-at-prompt1",
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
         device_map="auto",
@@ -48,7 +48,7 @@ def main(
         top_p=0.75,
         top_k=40,
         num_beams=4,
-        max_new_tokens=128,
+        max_new_tokens=1024,
         stream_output=False,
         **kwargs,
     ):
@@ -62,13 +62,16 @@ def main(
             num_beams=num_beams,
             **kwargs,
         )
-
+        eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s><|system|>")[-1], tokenizer.encode("<s>")[-1], tokenizer.encode("<|system|>")[-1], tokenizer.encode("<s>[INST]")[-1], tokenizer.encode("<<SYS>>")[-1], tokenizer.encode(")<")[-1]]
+        #eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s>"), tokenizer.encode("<|system|>"), tokenizer.encode("<s>[INST]"), tokenizer.encode("<<SYS>>")]
+        print(eos_tokens)
         generate_params = {
             "input_ids": input_ids,
             "generation_config": generation_config,
             "return_dict_in_generate": True,
             "output_scores": True,
             "max_new_tokens": max_new_tokens,
+            "eos_token_id": eos_tokens,
         }
 
         if stream_output:
@@ -81,6 +84,7 @@ def main(
                     "stopping_criteria", transformers.StoppingCriteriaList()
                 )
                 kwargs["stopping_criteria"].append(Stream(callback_func=callback))
+                print(kwargs)
                 with torch.no_grad():
                     model.generate(**kwargs)
 
@@ -91,8 +95,8 @@ def main(
                 for output in generator:
                     # new_tokens = len(output) - len(input_ids[0])
                     decoded_output = tokenizer.decode(output)
-
-                    if output[-1] in [tokenizer.eos_token_id]:
+                    print(output[-1])
+                    if output[-1] in eos_tokens:
                         break
 
                     yield prompter.get_response(decoded_output)
@@ -106,6 +110,7 @@ def main(
                 return_dict_in_generate=True,
                 output_scores=True,
                 max_new_tokens=max_new_tokens,
+                eos_token_id=eos_tokens
             )
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
@@ -138,7 +143,7 @@ def main(
                 label="Output",
             )
         ],
-        title="Text to Triplets - using `vicuna-7b--text-to-triplets-gpt-explanations`",
+        title="Text to Triplets - using \'Llama-2-7b-combined-with-reflection\'",
         description="Generate Triplets using custom Alpaca-LoRA model",  # noqa: E501
     ).queue().launch(server_name="0.0.0.0", share=share_gradio)
 
