@@ -7,7 +7,7 @@ https://twitter.com/AlphaSignalAI/status/1682815295893692416/photo/1
 
 from datasets import load_dataset
 from trl import SFTTrainer
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import LlamaForCausalLM, AutoModelForCausalLM, AutoTokenizer
 from transformers.training_args import TrainingArguments
 from typing import List
 import fire
@@ -69,7 +69,9 @@ def train(
     lora_dropout: float = 0.05,
     lora_target_modules: List[str] = [
         "q_proj",
+        "k_proj",
         "v_proj",
+        "o_proj",
     ],
     # llm hyperparams
     train_on_inputs: bool = True,  # if False, masks out inputs in loss
@@ -93,17 +95,19 @@ def train(
         print("Please specify directory to save output model: --output_dir=/home2/tsadler/models...")
         exit(0)
     if val_split == "":
-        print("Please specify validaiton filename (csv, no extension): --val_split=val")
+        print("Please specify validaiton filename (csv): --val_split=val")
     gradient_accumulation_steps = batch_size // micro_batch_size
-    train_data = load_dataset(data_path+'train.csv')
-    val_data = load_dataset(data_path+val_split)
+    train_data = load_dataset(data_path, data_files="train.csv", split="train", column_names=['text'])
+    print(train_data.column_names)
+    val_data = load_dataset(data_path, data_files=val_split, split="train", column_names=['text'])
+    print(val_data.column_names)
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     ddp = world_size != 1
     device_map = "auto"
     if ddp:
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
         gradient_accumulation_steps = gradient_accumulation_steps // world_size
-    model = AutoModelForCausalLM.from_pretrained(base_model,
+    model = LlamaForCausalLM.from_pretrained(base_model,
                                                 load_in_8bit=True,
                                                 torch_dtype=torch.float16,
                                                 device_map=device_map,)
@@ -137,7 +141,6 @@ def train(
         eval_dataset=val_data,
         dataset_text_field="text",
         peft_config=config,
-        torch_dtype=torch.float16,
         callbacks=[SavePeftModelCallback, ClearGPUCallback],
         max_seq_length=cutoff_len,
         args=transformers.TrainingArguments(
