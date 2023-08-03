@@ -116,6 +116,34 @@ def train(
         0  # unk. we want this to be different from the eos token
     )
     tokenizer.padding_side = "left"
+
+    def tokenize(prompt, add_eos_token=True):
+        # there's probably a way to do this with the tokenizer settings
+        # but again, gotta move fast
+        result = tokenizer(
+            prompt,
+            truncation=True,
+            max_length=cutoff_len,
+            padding=False,
+            return_tensors=None,
+        )
+        if (
+            result["input_ids"][-1] != tokenizer.eos_token_id
+            and len(result["input_ids"]) < cutoff_len
+            and add_eos_token
+        ):
+            result["input_ids"].append(tokenizer.eos_token_id)
+            result["attention_mask"].append(1)
+
+        result["labels"] = result["input_ids"].copy()
+
+        return result
+
+    def generate_and_tokenize_prompt(data_point):
+        full_prompt = data_point
+        tokenized_full_prompt = tokenize(full_prompt)
+        return tokenized_full_prompt
+
     model = prepare_model_for_int8_training(model)
 
     config = LoraConfig(
@@ -135,10 +163,17 @@ def train(
     model = get_peft_model(model, config)
     model.print_trainable_parameters()  # Be more transparent about the % of trainable params.
 
+    train = (
+        train_data.shuffle().map(generate_and_tokenize_prompt)
+    )
+    val = (
+        val_data.shuffle().map(generate_and_tokenize_prompt)
+    )
+
     trainer = SFTTrainer(
         model=model,
-        train_dataset=train_data,
-        eval_dataset=val_data,
+        train_dataset=train,
+        eval_dataset=val,
         dataset_text_field="text",
         peft_config=config,
         callbacks=[SavePeftModelCallback, ClearGPUCallback],
@@ -167,6 +202,12 @@ def train(
         ),
     )
     model.config.use_cache = False
+    old_state_dict = model.state_dict
+    model.state_dict = (
+        lambda self, *_, **__: get_peft_model_state_dict(
+            self, old_state_dict()
+        )
+    ).__get__(model, type(model))
     trainer.train()
     model.save_pretrained(output_dir)
 
