@@ -7,7 +7,7 @@ https://twitter.com/AlphaSignalAI/status/1682815295893692416/photo/1
 
 from datasets import load_dataset
 from trl import SFTTrainer
-from transformers import LlamaForCausalLM, AutoModelForCausalLM, AutoTokenizerForCausalLM
+from transformers import LlamaForCausalLM, AutoModelForCausalLM, AutoTokenizer
 from transformers.training_args import TrainingArguments
 from typing import List
 import fire
@@ -111,7 +111,7 @@ def train(
                                                 load_in_8bit=True,
                                                 torch_dtype=torch.float16,
                                                 device_map=device_map,)
-    tokenizer = AutoTokenizerForCausalLM.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
     tokenizer.pad_token_id = (
         0  # unk. we want this to be different from the eos token
     )
@@ -175,8 +175,8 @@ def train(
     tokenizer.padding_side = 'right'
     trainer = SFTTrainer(
         model=model,
-        train_dataset=train_data,
-        eval_dataset=val_data,
+        train_dataset=train,
+        eval_dataset=val,
         dataset_text_field="text",
         peft_config=config,
         callbacks=[SavePeftModelCallback, ClearGPUCallback],
@@ -199,6 +199,8 @@ def train(
             load_best_model_at_end=True if val_set_size > 0 else False,
             ddp_find_unused_parameters=False if ddp else None,
             group_by_length=group_by_length,
+            report_to=None,
+            run_name=None,
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
