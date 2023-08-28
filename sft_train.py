@@ -107,7 +107,7 @@ def train(
     if ddp:
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
         gradient_accumulation_steps = gradient_accumulation_steps // world_size
-    model = LlamaForCausalLM.from_pretrained(base_model,
+    model = AutoModelForCausalLM.from_pretrained(base_model,
                                                 load_in_8bit=True,
                                                 torch_dtype=torch.float16,
                                                 device_map=device_map,)
@@ -140,7 +140,7 @@ def train(
         return result
 
     def generate_and_tokenize_prompt(data_point):
-        full_prompt = data_point
+        full_prompt = data_point['text']
         tokenized_full_prompt = tokenize(full_prompt)
         return tokenized_full_prompt
 
@@ -169,11 +169,14 @@ def train(
     val = (
         val_data.shuffle().map(generate_and_tokenize_prompt)
     )
-
+    print(type(train))
+    print(type(val))
+    print(train[0])
+    tokenizer.padding_side = 'right'
     trainer = SFTTrainer(
         model=model,
-        train_dataset=train,
-        eval_dataset=val,
+        train_dataset=train_data,
+        eval_dataset=val_data,
         dataset_text_field="text",
         peft_config=config,
         callbacks=[SavePeftModelCallback, ClearGPUCallback],
