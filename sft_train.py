@@ -7,7 +7,7 @@ https://twitter.com/AlphaSignalAI/status/1682815295893692416/photo/1
 
 from datasets import load_dataset
 from trl import SFTTrainer
-from transformers import LlamaForCausalLM, AutoModelForCausalLM, AutoTokenizer
+from transformers import LlamaForCausalLM, AutoModelForCausalLM, AutoTokenizerForCausalLM
 from transformers.training_args import TrainingArguments
 from typing import List
 import fire
@@ -111,7 +111,7 @@ def train(
                                                 load_in_8bit=True,
                                                 torch_dtype=torch.float16,
                                                 device_map=device_map,)
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizerForCausalLM.from_pretrained(base_model)
     tokenizer.pad_token_id = (
         0  # unk. we want this to be different from the eos token
     )
