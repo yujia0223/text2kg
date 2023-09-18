@@ -1,7 +1,7 @@
 import os
 import sys
 from typing import List
-
+from trl import SFTTrainer
 import fire
 import torch
 import transformers
@@ -48,8 +48,8 @@ class SavePeftModelCallback(TrainerCallback):
         return control
 
 class ClearGPUCallback(TrainerCallback):
-    #def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-    #    torch.cuda.empty_cache()
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        torch.cuda.empty_cache()
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         torch.cuda.empty_cache()
 
@@ -251,13 +251,14 @@ def train(
     else:
         train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
         val_data = None
-
+    print(train_data[0])
     if not ddp and torch.cuda.device_count() > 1:
         # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
         model.is_parallelizable = True
         model.model_parallel = True
 
     trainer = transformers.Trainer(
+    #trainer = SFTTrainer(
         model=model,
         train_dataset=train_data,
         eval_dataset=val_data,
@@ -269,15 +270,15 @@ def train(
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             fp16=True,
-            logging_steps=50,
+            logging_steps=10,
             optim="adamw_torch",
             evaluation_strategy="steps" if val_set_size > 0 else "no",
-            save_strategy="no",
-            eval_steps=10 if val_set_size > 0 else None,
-            save_steps=10,
+            save_strategy="steps",
+            eval_steps=150 if val_set_size > 0 else None,
+            save_steps=300,
             output_dir=output_dir,
             save_total_limit=3,
-            load_best_model_at_end=False,#load_best_model_at_end=True if val_set_size > 0 else False,
+            load_best_model_at_end=True if val_set_size > 0 else False,
             ddp_find_unused_parameters=False if ddp else None,
             group_by_length=group_by_length,
             report_to="wandb" if use_wandb else None,
@@ -300,6 +301,8 @@ def train(
         model = torch.compile(model)
     trainer.add_callback(ClearGPUCallback)
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+
+    torch.cuda.empty_cache()
 
     model.save_pretrained(output_dir)
 
