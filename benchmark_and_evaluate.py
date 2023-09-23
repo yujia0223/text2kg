@@ -20,7 +20,7 @@ from warnings import simplefilter
 from sklearn.exceptions import UndefinedMetricWarning
 # ignore all UndefinedMetricWarning warnings
 simplefilter(action='ignore', category=UndefinedMetricWarning)
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
 import os
 import regex as re
 import itertools
@@ -47,8 +47,10 @@ def benchmark(
     max_tokens: int = 1024,
     dump: str = "output.pickle",
     load_8bit: bool = False,
+    error: str = "errors0.txt",
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
     csv_file: str = None,  # New argument for CSV file
+    test: str = "UofA-LINGO/text_to_triplets_new_ins"
 ):
     if model_path == "":
         print("Enter the path to the model. (python benchmark_and_evaluate.py --model_path=/home/tsadler/models/vicuna-7b)")
@@ -85,6 +87,7 @@ def benchmark(
     def evaluate(
         instruction,
         input=None,
+        error="errors0.txt",
         temperature=0.1,
         top_p=0.75,
         top_k=40,
@@ -94,7 +97,7 @@ def benchmark(
         **kwargs,
     ):
         prompt = prompter.generate_prompt(instruction, input)
-        print(prompt)
+        #print(prompt)
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].to(device)
         generation_config = GenerationConfig(
@@ -105,7 +108,8 @@ def benchmark(
             **kwargs,
         )
         
-        eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s><|system|>")[-1], tokenizer.encode("<s>")[-1], tokenizer.encode("<|system|>")[-1], tokenizer.encode("<s>[INST]")[-1], tokenizer.encode("<<SYS>>")[-1], tokenizer.encode(")<")[-1]]
+        # Was used to handle bugged autotrain model outputs, should be fixed for autotrain as long as default is not used to train.
+        eos_tokens = [tokenizer.eos_token_id]#, tokenizer.encode("<s>")[-1]]
 
         generate_params = {
             "input_ids": input_ids,
@@ -144,24 +148,33 @@ def benchmark(
 
         # Without streaming
         with torch.no_grad():
-            generation_output = model.generate(
-                input_ids=input_ids,
-                generation_config=generation_config,
-                return_dict_in_generate=True,
-                output_scores=True,
-                max_new_tokens=max_new_tokens,
-                eos_token_id=eos_tokens,
-            )
-        s = generation_output.sequences[0]
+            try:
+                generation_output = model.generate(
+                    input_ids=input_ids,
+                    generation_config=generation_config,
+                    return_dict_in_generate=True,
+                    output_scores=True,
+                    max_new_tokens=max_new_tokens,
+                    eos_token_id=eos_tokens,
+                    pad_token_id=0,
+                )
+                s = generation_output.sequences[0]
+            except ValueError as v:
+                with open(error, 'a') as f:
+                    print(model_path, '\n', v, '\n', input, '\n', file=f)
+                s = torch.tensor([1,2])
         output = tokenizer.decode(s)
+        #print(output)
         yield prompter.get_response(output)
 
     # dt = load_dataset("UofA-LINGO/text_to_triplets")
-    dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+    # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+    # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
+    dt = load_dataset(test)
     output = {}
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
-        output[i] = list(evaluate(entry["instruction"], entry["input"]))
+        output[i] = list(evaluate(entry["instruction"], entry["input"], error))
         #print(output[i])
     
     with open(dump, "wb") as handle:
@@ -170,7 +183,9 @@ def benchmark(
     # TSadler: Removing intermediate CSV file for combined code
     # generate dataframe for the evaluation code
     # dt = load_dataset("UofA-LINGO/text_to_triplets")
-    dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+    # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+    # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
+    dt = load_dataset(test)
     df = pd.DataFrame(dt["test"])
     df["gt"] = df["output"]
     df = df.drop(columns=["output"])
@@ -182,6 +197,13 @@ def benchmark(
     #with open("vicuna-7b-with-explanasion-correct-df.pickle", "wb") as handle:
     #    pickle.dump(df, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+
+def split_ignore_quotes_and_underscore(input_string):
+    input_string = input_string.replace(',_', '--PLACEHOLDER--')
+    pattern = r',(?=(?:[^"]*"[^"]*")*[^"]*$)(?![^"]*"[^"]*(?:"[^"]*"[^"]*)*$)'
+    input_string = re.split(pattern, input_string)
+    input_string = [x.replace('--PLACEHOLDER--', ',_') for x in input_string]
+    return input_string
 
 
 def getCandsAndRefsFromCsv(df):
@@ -198,6 +220,7 @@ def getCandsAndRefsFromCsv(df):
         #DEBUG: print(triples_str_cand)
         # Remove EOS token
         triples_str_cand = triples_str_cand.replace('</s>', '')
+        triples_str_cand = triples_str_cand.replace('<|im_end|>', '')
 
         #triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
         #triples_cand = re.findall(r"\((.*?)\)[<\n]", triples_str_cand)
@@ -219,21 +242,34 @@ def getCandsAndRefsFromCsv(df):
         # This looks for the form of '...|...|...', which we expect our triples to be in. This must be followed
         # with a closing square bracket or comma to match to avoid edge cases such as the one below:
         # ['prop's | pred | value's'] would match to -> ['s | pred | value'] without the [],].
-        # triples_cand_tmp = re.findall(r"'(.*?[|].*?[|].*?)'[],]", triples_str_cand)
-        # triples_cand = []
-        # for triple in triples_cand_tmp:
-        #     triple = triple.split(' | ')
-        #     triples_cand.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
-
+        #triples_cand_tmp = re.findall(r"'(.*?[|].*?[|].*?)'[],]", triples_str_cand)
+        #triples_cand = []
+        #for triple in triples_cand_tmp:
+        #    triple = triple.split(' | ')
+        #    triples_cand.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
         tmp = []
+        #if i == 3:
+            #exit(0)
         for triple in triples_cand:
+            #triple = triple.replace('("', '(')
+            #if triple.count('"') % 2 == 1:
+            #    triple = triple.replace('")', ')')
+            #print(triple)
+            # For splitting on commas, but not those that are surrounded by quotes or those followed by an underscore. Used to properly format.
+            #t = split_ignore_quotes_and_underscore(triple)
+            #print(t)
+            #if len(t) == 3:
+            #    triple = f'{t[0].strip()} | {t[1].strip()} | {t[2].strip()}' 
+
             # Do not penalize the model for errors in splitting that cause empty strings
             if triple == '':
                 continue
+            if triple == '<s>':
+                triple = '( | , | )'
             # To prevent index errors later, pad incomplete triples with empty strings.
             if len(triple.split(' | ')) < 3:
                 if len(triple.split(' | ')) == 1:
-                    triple += ' |  | )'
+                    triple += ' | , | )'
                 elif len(triple.split(' | ')) == 2:
                     triple += ' | )'
             if len(triple.split(' | ')) > 3:
@@ -297,7 +333,7 @@ def getCandsAndRefsFromCsv(df):
 
 def getRefs(filepath, allcand_ids):
     with open(filepath, encoding='utf-8') as fp:
-        refssoup = BeautifulSoup(fp, 'lxml')
+        refssoup = None #BeautifulSoup(fp, 'lxml')
 
     refsentries = refssoup.find('benchmark').find('entries').find_all('entry')
 
@@ -419,7 +455,7 @@ def getCandsFromTsv(filepath):
 
 def getCands(filepath):
     with open(filepath, encoding='utf-8') as fp:
-        candssoup = BeautifulSoup(fp, 'lxml')
+        candssoup = None #BeautifulSoup(fp, 'lxml')
 
     candssentries = candssoup.find('benchmark').find('entries').find_all('entry')
 
@@ -707,6 +743,7 @@ def evaluateRefCand(reference, candidate):
             print("candsub:",candsub)
             print("reflist:",new_ref,len(new_ref))
             print("candlist:",new_cand,len(new_cand))
+            print("candidate:",candidate)
             exit(0)
 
         ref_list = nltk.word_tokenize(refsub)
@@ -1412,15 +1449,19 @@ def main(
     pickle: str = "",
     output_path: str = "",
     output_details_path: str = "",
+    error: str = "/home/tsadler/lingo-scripts/errors0.txt",
+    test: str = "UofA-LINGO/text_to_triplets_new_ins",
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
     if pickle == "":
-        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template)
+        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test)
     else:
         output = pd.read_pickle(pickle)
         # dt = load_dataset("UofA-LINGO/text_to_triplets")
-        dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+        # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
+        # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
+        dt = load_dataset(test)
         df = pd.DataFrame(dt["test"])
         df["gt"] = df["output"]
         df = df.drop(columns=["output"])
