@@ -14,6 +14,8 @@ device = "cuda"
 
 
 def main(
+    model: str = "",
+    tok: str = "",
     load_8bit: bool = False,
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
     server_name: str = "0.0.0.0",  # Allows to listen on all interfaces by providing '0.
@@ -22,9 +24,12 @@ def main(
     prompter = Prompter(prompt_template)
     # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
     #tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
-    tokenizer = LlamaTokenizer.from_pretrained("/home2/tsadler/models/Llama-2-7b-rf-at-prompt1")
+    path = model
+    if tok == "":
+        tok = path
+    tokenizer = LlamaTokenizer.from_pretrained(tok)
     model = LlamaForCausalLM.from_pretrained(
-        "/home2/tsadler/models/Llama-2-7b-rf-at-prompt1",
+        path,
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
         device_map="auto",
@@ -47,7 +52,7 @@ def main(
         temperature=0.1,
         top_p=0.75,
         top_k=40,
-        num_beams=4,
+        num_beams=5,
         max_new_tokens=1024,
         stream_output=False,
         **kwargs,
@@ -62,9 +67,9 @@ def main(
             num_beams=num_beams,
             **kwargs,
         )
-        eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s><|system|>")[-1], tokenizer.encode("<s>")[-1], tokenizer.encode("<|system|>")[-1], tokenizer.encode("<s>[INST]")[-1], tokenizer.encode("<<SYS>>")[-1], tokenizer.encode(")<")[-1]]
+        eos_tokens = [tokenizer.eos_token_id]#, tokenizer.encode("<s>")[-1]]
+        #eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s><|system|>")[-1], tokenizer.encode("<|system|>")[-1], tokenizer.encode("<s>[INST]")[-1], tokenizer.encode("<<SYS>>")[-1], tokenizer.encode(")<")[-1], tokenizer.encode("<s>")[-1]]
         #eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("<s>"), tokenizer.encode("<|system|>"), tokenizer.encode("<s>[INST]"), tokenizer.encode("<<SYS>>")]
-        print(eos_tokens)
         generate_params = {
             "input_ids": input_ids,
             "generation_config": generation_config,
@@ -72,6 +77,7 @@ def main(
             "output_scores": True,
             "max_new_tokens": max_new_tokens,
             "eos_token_id": eos_tokens,
+            "pad_token_id": 0,
         }
 
         if stream_output:
@@ -95,8 +101,13 @@ def main(
                 for output in generator:
                     # new_tokens = len(output) - len(input_ids[0])
                     decoded_output = tokenizer.decode(output)
-                    print(output[-1])
+                    print("Output:")
+                    print(output)
+                    print("\nDecoded Output:")
+                    print(decoded_output)
                     if output[-1] in eos_tokens:
+                        print("IN BREAK")
+                        print(decoded_output)
                         break
 
                     yield prompter.get_response(decoded_output)
@@ -110,7 +121,8 @@ def main(
                 return_dict_in_generate=True,
                 output_scores=True,
                 max_new_tokens=max_new_tokens,
-                eos_token_id=eos_tokens
+                eos_token_id=eos_tokens,
+                pad_token_id=0,
             )
         s = generation_output.sequences[0]
         output = tokenizer.decode(s)
@@ -131,9 +143,9 @@ def main(
             gr.components.Slider(
                 minimum=0, maximum=100, step=1, value=40, label="Top k"
             ),
-            gr.components.Slider(minimum=1, maximum=4, step=1, value=4, label="Beams"),
+            gr.components.Slider(minimum=1, maximum=8, step=1, value=4, label="Beams"),
             gr.components.Slider(
-                minimum=1, maximum=2000, step=1, value=128, label="Max tokens"
+                minimum=1, maximum=2000, step=1, value=1024, label="Max tokens"
             ),
             gr.components.Checkbox(label="Stream output", value=True),
         ],
@@ -143,7 +155,7 @@ def main(
                 label="Output",
             )
         ],
-        title="Text to Triplets - using \'Llama-2-7b-combined-with-reflection\'",
+        title=f"Text to Triplets - using \'{path}\'",
         description="Generate Triplets using custom Alpaca-LoRA model",  # noqa: E501
     ).queue().launch(server_name="0.0.0.0", share=share_gradio)
 
