@@ -1,0 +1,7 @@
+{
+    "description": "Template used by LlongOrca-7b-16k.",
+    "prompt_input": "<|im_start|>system\nBelow is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n<|im_end|>\n<|im_start|>user\n{instruction}\n\n{input}<|im_end|>\n<|im_start|>assistant\n",
+    "prompt_no_input": "<|im_start|>system\nBelow is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n",
+    "response_split": "assistant",
+    "end_tag": "<|im_end|>"
+}
