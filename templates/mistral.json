@@ -1,0 +1,7 @@
+{
+	"description": "Template used by Mistral.",
+	"prompt_input": "<s>[INST]You are an AI assistant who is an expert in knowledge graphs. You will be given an instruction and text. Generate a response to appropriately complete the instruction's request.\n\nInstruction:\n{instruction}\n\nText:\n{input}[/INST]\n",
+	"prompt_no_input": "<s>[INST]You are an AI assistant who is an expert in knowledge graphs. You will be given an instruction. Generate a response to appropriately complete the instruction's request.\n\nInstruction:\n{instruction}\n\n[/INST]\n",
+	"response_split": "[/INST]\n"
+}
+
