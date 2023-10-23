@@ -109,7 +109,7 @@ def benchmark(
         )
         
         # Was used to handle bugged autotrain model outputs, should be fixed for autotrain as long as default is not used to train.
-        eos_tokens = [tokenizer.eos_token_id]#, tokenizer.encode("<s>")[-1]]
+        eos_tokens = [tokenizer.eos_token_id, tokenizer.encode("### END")[-1]]#, tokenizer.encode("<s>")[-1]]
 
         generate_params = {
             "input_ids": input_ids,
@@ -219,6 +219,7 @@ def getCandsAndRefsFromCsv(df):
         triples_str_cand = df['model_output'].values[i]
         #DEBUG: print(triples_str_cand)
         # Remove EOS token
+        triples_str_cand = triples_str_cand.replace('###', '')
         triples_str_cand = triples_str_cand.replace('</s>', '')
         triples_str_cand = triples_str_cand.replace('<|im_end|>', '')
 
@@ -251,15 +252,15 @@ def getCandsAndRefsFromCsv(df):
         #if i == 3:
             #exit(0)
         for triple in triples_cand:
-            #triple = triple.replace('("', '(')
-            #if triple.count('"') % 2 == 1:
-            #    triple = triple.replace('")', ')')
+            triple = triple.replace('("', '(')
+            if triple.count('"') % 2 == 1:
+                triple = triple.replace('")', ')')
             #print(triple)
             # For splitting on commas, but not those that are surrounded by quotes or those followed by an underscore. Used to properly format.
-            #t = split_ignore_quotes_and_underscore(triple)
+            t = split_ignore_quotes_and_underscore(triple)
             #print(t)
-            #if len(t) == 3:
-            #    triple = f'{t[0].strip()} | {t[1].strip()} | {t[2].strip()}' 
+            if len(t) == 3:
+                triple = f'{t[0].strip()} | {t[1].strip()} | {t[2].strip()}' 
 
             # Do not penalize the model for errors in splitting that cause empty strings
             if triple == '':
@@ -1447,6 +1448,7 @@ def main(
     max_tokens: int = 1024,
     dump: str = "output.pickle",
     pickle: str = "",
+    load_8bit: bool = False,
     output_path: str = "",
     output_details_path: str = "",
     error: str = "/home/tsadler/lingo-scripts/errors0.txt",
@@ -1455,9 +1457,10 @@ def main(
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
     if pickle == "":
-        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test)
+        df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test, load_8bit=load_8bit)
     else:
         output = pd.read_pickle(pickle)
+        print(len(output.values()))
         # dt = load_dataset("UofA-LINGO/text_to_triplets")
         # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
         # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
