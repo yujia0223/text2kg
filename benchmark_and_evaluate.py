@@ -5,7 +5,6 @@ from datasets import load_dataset
 import fire
 import torch
 import transformers
-import csv
 from transformers import LlamaForCausalLM, LlamaTokenizer, GenerationConfig
 import pickle
 # alpaca-lora utils
@@ -15,12 +14,9 @@ from utils.prompter import Prompter
 from tqdm import tqdm
 
 # Evaluation imports
-# import warnings filter
 from warnings import simplefilter
 from sklearn.exceptions import UndefinedMetricWarning
-# ignore all UndefinedMetricWarning warnings
 simplefilter(action='ignore', category=UndefinedMetricWarning)
-#from bs4 import BeautifulSoup
 import os
 import regex as re
 import itertools
@@ -58,8 +54,6 @@ def benchmark(
     prompter = Prompter(prompt_template)
     print(f"Benchmarking model at: {model_path}")
     print(f"Using tokenizer at (blank means model_path): {tok}")
-    # tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
-    # tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
     tokenizer = None
     if tok == "":
         tokenizer = LlamaTokenizer.from_pretrained(model_path)
@@ -67,7 +61,6 @@ def benchmark(
         tokenizer = LlamaTokenizer.from_pretrained(tok)
 
     model = LlamaForCausalLM.from_pretrained(
-        #"/home/taesiri/src/alpaca-lora/vicuna-7b--based-export-text-to-triplets-explanation-v3/",
         model_path,
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
@@ -97,7 +90,7 @@ def benchmark(
         **kwargs,
     ):
         prompt = prompter.generate_prompt(instruction, input)
-        #print(prompt)
+        #DEBUG: print(prompt)
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].to(device)
         generation_config = GenerationConfig(
@@ -164,42 +157,32 @@ def benchmark(
                     print(model_path, '\n', v, '\n', input, '\n', file=f)
                 s = torch.tensor([1,2])
         output = tokenizer.decode(s)
-        #print(output)
+        #DEBUG: print(output)
         yield prompter.get_response(output)
 
-    # dt = load_dataset("UofA-LINGO/text_to_triplets")
-    # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
-    # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
     dt = load_dataset(test)
     output = {}
     for i in tqdm(range(len(dt["test"]))):
         entry = dt["test"][i]
         output[i] = list(evaluate(entry["instruction"], entry["input"], error))
-        #print(output[i])
+        #DEBUG: print(output[i])
     
+    # Write out raw output incase of a crash later on
     with open(dump, "wb") as handle:
         pickle.dump(output, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # TSadler: Removing intermediate CSV file for combined code
-    # generate dataframe for the evaluation code
-    # dt = load_dataset("UofA-LINGO/text_to_triplets")
-    # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
-    # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
+    # Generate dataframe for the evaluation code
     dt = load_dataset(test)
     df = pd.DataFrame(dt["test"])
     df["gt"] = df["output"]
     df = df.drop(columns=["output"])
     df["model_output"] = [x[0] for x in output.values()]
     return df
-    #df.to_csv("vicuna-7b-with-explanasion-correct.csv", index=False)
-
-    # dump df as pickle
-    #with open("vicuna-7b-with-explanasion-correct-df.pickle", "wb") as handle:
-    #    pickle.dump(df, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def split_ignore_quotes_and_underscore(input_string):
     input_string = input_string.replace(',_', '--PLACEHOLDER--')
+    # Pattern splits on commas, ignoring any surrounded by double quotes
     pattern = r',(?=(?:[^"]*"[^"]*")*[^"]*$)(?![^"]*"[^"]*(?:"[^"]*"[^"]*)*$)'
     input_string = re.split(pattern, input_string)
     input_string = [x.replace('--PLACEHOLDER--', ',_') for x in input_string]
@@ -207,7 +190,6 @@ def split_ignore_quotes_and_underscore(input_string):
 
 
 def getCandsAndRefsFromCsv(df):
-    #df = pd.read_csv(filepath, header=0)
     print(df.head())
 
     allcand_ids = df.index.values
@@ -222,9 +204,6 @@ def getCandsAndRefsFromCsv(df):
         triples_str_cand = triples_str_cand.replace('###', '')
         triples_str_cand = triples_str_cand.replace('</s>', '')
         triples_str_cand = triples_str_cand.replace('<|im_end|>', '')
-
-        #triples_cand = re.findall(r"'(.*?)'", triples_str_cand)
-        #triples_cand = re.findall(r"\((.*?)\)[<\n]", triples_str_cand)
 
         # New style triples
         triples_cand = triples_str_cand.strip().split('\n')
@@ -249,16 +228,15 @@ def getCandsAndRefsFromCsv(df):
         #    triple = triple.split(' | ')
         #    triples_cand.append(f'({triple[0]}, {triple[1]}, {triple[2]})')
         tmp = []
-        #if i == 3:
-            #exit(0)
         for triple in triples_cand:
+            # Remove extra double quotes, triples won't get split properly if everything is in double quotes.
             triple = triple.replace('("', '(')
             if triple.count('"') % 2 == 1:
                 triple = triple.replace('")', ')')
-            #print(triple)
+            #DEBUG: print(triple)
             # For splitting on commas, but not those that are surrounded by quotes or those followed by an underscore. Used to properly format.
             t = split_ignore_quotes_and_underscore(triple)
-            #print(t)
+            #DEBUG: print(t)
             if len(t) == 3:
                 triple = f'{t[0].strip()} | {t[1].strip()} | {t[2].strip()}' 
 
@@ -266,6 +244,7 @@ def getCandsAndRefsFromCsv(df):
             if triple == '':
                 continue
             if triple == '<s>':
+                # Can't just use spaces as it won't result in a length three triple due to replacing double spaces
                 triple = '( | , | )'
             # To prevent index errors later, pad incomplete triples with empty strings.
             if len(triple.split(' | ')) < 3:
@@ -332,160 +311,6 @@ def getCandsAndRefsFromCsv(df):
 
     return allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list
 
-def getRefs(filepath, allcand_ids):
-    with open(filepath, encoding='utf-8') as fp:
-        refssoup = None #BeautifulSoup(fp, 'lxml')
-
-    refsentries = refssoup.find('benchmark').find('entries').find_all('entry')
-
-    all_ref_triples = []
-    for index in allcand_ids:
-        id = int(index.split('Id')[1])-1
-        entry = refsentries[id]
-        entryreftriples = []
-        modtriplesref = entry.find('modifiedtripleset').find_all('mtriple')
-        for modtriple in modtriplesref:
-            entryreftriples.append(modtriple.text)
-        all_ref_triples.append(entryreftriples)
-
-    new_ref_list = []
-
-    for entry in all_ref_triples:
-        new_triples = []
-        for triple in entry:
-            new_triple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
-            new_triple = re.sub(r'_', ' ', new_triple).lower()
-            new_triple = re.sub(r'\s+', ' ', new_triple).lower()
-            adjusttriple = new_triple.split(' | ')
-            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
-            if manualmodified:
-                adjusttriple[-1] = manualmodified.group(1)
-                new_triple = ' | '.join(adjusttriple)
-            new_triples.append(new_triple)
-        new_ref_list.append(new_triples)
-
-    return all_ref_triples, new_ref_list
-
-def getCandsFromRebelTsv(filepath):
-    df = pd.read_csv(filepath, sep='\t', header=0)
-    print(df.head())
-    # df = df[:10]
-    # df = df.sort_values(by=['id'])
-    # print(df.head())
-    # Get the triples for row with id 'Id770'
-    # Example of triples: [('Abraham A. Ribicoff', 'born in', 'United States'), ('United States', 'has ethnic group', 'African Americans')]
-    # triples_str_ref = df[df['id'] == 'Id770']['triples'].values[0]
-    # # Convert the triples string to a list of tuples
-    # triples = ast.literal_eval("[" + triples_str + "]")[0]
-    allcand_ids = df['id'].values
-    all_text = df['lexs'].values
-    # from IPython import embed; embed()
-    all_cand_triples = []
-    for i in range(len(df)):
-        # new_triples = []
-        triples_str = df['triples'].values[i]
-        triples = ast.literal_eval("[" + triples_str + "]")[0]
-        # for triple in triples:
-        #     triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
-        #     new_triples.append(triple_str)
-        all_cand_triples.append(triples)
-
-    new_cand_list = []
-    
-    for entry in all_cand_triples:
-        new_triples = []
-        # triple 'Turn_Me_On_(album) | runtime | 35.1'
-        for triple in entry:
-            # triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
-            new_triple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
-            new_triple = re.sub(r'_', ' ', new_triple).lower()
-            new_triple = re.sub(r'\s+', ' ', new_triple).lower()
-            adjusttriple = new_triple.split(' | ')
-            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
-            if manualmodified:
-                adjusttriple[-1] = manualmodified.group(1)
-                new_triple = ' | '.join(adjusttriple)
-            new_triples.append(new_triple)
-        new_cand_list.append(new_triples)
-
-    return allcand_ids, all_text, all_cand_triples, new_cand_list
-
-def getCandsFromTsv(filepath):
-    df = pd.read_csv(filepath, sep='\t', header=0)
-    print(df.head())
-    # df = df[:10]
-    # df = df.sort_values(by=['id'])
-    # print(df.head())
-    # Get the triples for row with id 'Id770'
-    # Example of triples: [('Abraham A. Ribicoff', 'born in', 'United States'), ('United States', 'has ethnic group', 'African Americans')]
-    # triples_str = df[df['id'] == 'Id770']['triples'].values[0]
-    # # Convert the triples string to a list of tuples
-    # triples = ast.literal_eval("[" + triples_str + "]")[0]
-    allcand_ids = df['id'].values
-    all_text = df['lexs'].values
-    # from IPython import embed; embed()
-    all_cand_triples = []
-    for i in range(len(df)):
-        new_triples = []
-        triples_str = df['triples'].values[i]
-        triples = ast.literal_eval("[" + triples_str + "]")[0]
-        for triple in triples:
-            triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
-            new_triples.append(triple_str)
-        all_cand_triples.append(new_triples)
-
-    new_cand_list = []
-    
-    for entry in all_cand_triples:
-        new_triples = []
-        # triple 'Turn_Me_On_(album) | runtime | 35.1'
-        for triple in entry:
-            # triple_str = triple[0] +' | ' + triple[1] +' | '+ triple[2]
-            new_triple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
-            new_triple = re.sub(r'_', ' ', new_triple).lower()
-            new_triple = re.sub(r'\s+', ' ', new_triple).lower()
-            adjusttriple = new_triple.split(' | ')
-            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
-            if manualmodified:
-                adjusttriple[-1] = manualmodified.group(1)
-                new_triple = ' | '.join(adjusttriple)
-            new_triples.append(new_triple)
-        new_cand_list.append(new_triples)
-
-    return allcand_ids, all_text, all_cand_triples, new_cand_list
-
-def getCands(filepath):
-    with open(filepath, encoding='utf-8') as fp:
-        candssoup = None #BeautifulSoup(fp, 'lxml')
-
-    candssentries = candssoup.find('benchmark').find('entries').find_all('entry')
-
-    all_cand_triples = []
-
-    for entry in candssentries:
-        entrycandtriples = []
-        modtriplescand = entry.find('generatedtripleset').find_all('gtriple')
-        for modtriple in modtriplescand:
-            entrycandtriples.append(modtriple.text)
-        all_cand_triples.append(entrycandtriples)
-
-    new_cand_list = []
-
-    for entry in all_cand_triples:
-        new_triples = []
-        for triple in entry:
-            new_triple = re.sub(r"([a-z])([A-Z])", "\g<1> \g<2>", triple).lower()
-            new_triple = re.sub(r'_', ' ', new_triple).lower()
-            new_triple = re.sub(r'\s+', ' ', new_triple).lower()
-            adjusttriple = new_triple.split(' | ')
-            manualmodified = re.search(r'^(.*?)(\s\((.*?)\))$', adjusttriple[-1])
-            if manualmodified:
-                adjusttriple[-1] = manualmodified.group(1)
-                new_triple = ' | '.join(adjusttriple)
-            new_triples.append(new_triple)
-        new_cand_list.append(new_triples)
-
-    return all_cand_triples, new_cand_list
 
 def findSubList(sl,l):
     sll=len(sl)
@@ -527,6 +352,7 @@ def nonRefWords(new_ref_list, new_cand_list, foundnum, ngram_length):
         ngram_length -= 1
     #Return the new lists if all possible ngrams have been searched
     return new_ref_list, new_cand_list
+
 
 def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, baseidx):
     try:
@@ -627,6 +453,7 @@ def getRefDict(new_ref_list, new_cand_list, triple_type_ref, triple_type_cand, b
 
 
     return candidate_found, ref_dict_list, cand_dict_list, total_list
+
 
 def evaluateRefCand(reference, candidate):
     new_ref = reference.split(' | ')
@@ -964,6 +791,7 @@ def evaluateRefCand(reference, candidate):
 
     return results, results_per_tag
 
+
 def calculateAllScores(new_ref_list, new_cand_list):
     #DEBUG: print(new_ref_list)
     #DEBUG: print(new_cand_list)
@@ -1001,6 +829,7 @@ def calculateAllScores(new_ref_list, new_cand_list):
 
     return total_sem_eval_list, total_sem_eval_list_per_tag
 
+
 def sumAllCombination(selected_sem_eval_list):
     # import IPython; IPython.embed()
     all_dict = {}
@@ -1023,6 +852,7 @@ def sumAllCombination(selected_sem_eval_list):
         all_dict.update(ent_type_dict)
     return all_dict
 
+
 def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_ref_list, new_cand_list):
     selected_sem_eval_list = []
     selected_sem_eval_list_per_tag = []
@@ -1034,55 +864,7 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     # The four will not be scored
     for idx, candidate in enumerate(new_cand_list):
         #print('calculating system score for candidate ' + str(idx) + ' of ' + str(len(new_cand_list)))
-        # if len(new_cand_list[idx]) > len(new_ref_list[idx]):
-        #     # Get all permutations
-        #     choosecands = list(itertools.permutations([x[0] for x in enumerate(total_sem_eval_list[idx])], len(total_sem_eval_list[idx][0])))
-        #     # The permutations in different orders are not necessary: we only need one order without the number of candidates we're looking at
-        #     choosecands = set([tuple(sorted(i)) for i in choosecands])  # Sort inner list and then use set
-        #     choosecands = list(map(list, choosecands))  # Converting back to list
-        # else:
-        #     # Otherwise, we're just going to score all candidates
-        #     choosecands = [list(range(len(new_cand_list[idx])))]
-
-        # # Get all permutations in which the scores can be combined
-        # if len(new_cand_list[idx]) > len(new_ref_list[idx]):
-        #     choosescore = list(itertools.permutations([x[0] for x in enumerate(total_sem_eval_list[idx][0])], len(new_ref_list[idx])))
-        #     choosescore = [list(x) for x in choosescore]
-        # else:
-        #     choosescore = list(itertools.permutations([x[0] for x in enumerate(total_sem_eval_list[idx][0])], len(new_cand_list[idx])))
-        #     choosescore = [list(x) for x in choosescore]
-
-        # # Get all possible combinations between the candidates and the scores
-        # combilist = list(itertools.product(choosecands, choosescore))
-
         total_dict = {'totalscore': 0}
-
-        # for combination in combilist:
-        #     combi_score = 0
-        #     # Take the combination between the candidate and the score
-        #     zipcombi = list(zip(combination[0], combination[1]))
-        #     collected_sem_eval = []
-        #     collected_sem_eval_per_tag = []
-
-        #     for zc in zipcombi:
-        #         collected_scores = total_sem_eval_list[idx][zc[0]][zc[1]]
-        #         f1_score = statistics.mean([collected_scores['ent_type']['f1'], collected_scores['partial']['f1'], collected_scores['strict']['f1'], collected_scores['exact']['f1']])
-        #         combi_score += f1_score
-
-        #         collected_sem_eval.append(collected_scores)
-        #         collected_sem_eval_per_tag.append(total_sem_eval_list_per_tag[idx][zc[0]][zc[1]])
-
-
-        #     # If the combination is the highest score thus far, or the first score, make it the total_dict
-        #     if (combi_score > total_dict['totalscore']) or (len(total_dict) == 1):
-        #         total_dict = {'totalscore': combi_score, 'combination': combination, 'sem_eval_list': collected_sem_eval,
-        #                      'sem_eval_per_tag_list': collected_sem_eval_per_tag}
-        # triple_score.append(total_dict['sem_eval_list'])
-        # combination_selected.append(total_dict['combination'])
-        # ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
-        # triple_score_sum.append(ent_type_dict)
-        # selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
-        # selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
         collected_sem_eval = []
         collected_sem_eval_per_tag = []
         collected_combinations = []
@@ -1394,6 +1176,7 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
 
     return all_dict, triple_score, combination_selected, triple_score_sum
 
+
 def calculateExactTripleScore(ref_list, cand_list, all_dict):
     new_ref_list = [[string.lower() for string in sublist] for sublist in ref_list]
     new_cand_list = [[string.lower() for string in sublist] for sublist in cand_list]
@@ -1413,6 +1196,7 @@ def calculateExactTripleScore(ref_list, cand_list, all_dict):
     all_dict.update({'Exact_match': {'Precision': precision, 'Recall': recall, 'F1': f1}})
 
     return all_dict
+
 
 def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list = getCandsAndRefsFromCsv(input_dataframe)
@@ -1441,6 +1225,7 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     with open(outputfile_details, 'w') as outfile:
         json.dump(all, outfile)
 
+
 def main(
     model_path: str = "",
     tok: str = "",
@@ -1461,9 +1246,6 @@ def main(
     else:
         output = pd.read_pickle(pickle)
         print(len(output.values()))
-        # dt = load_dataset("UofA-LINGO/text_to_triplets")
-        # dt = load_dataset("UofA-LINGO/text_to_triplets_new_ins")
-        # dt = load_dataset("UofA-LINGO/webnlg-test-cleaned")
         dt = load_dataset(test)
         df = pd.DataFrame(dt["test"])
         df["gt"] = df["output"]
@@ -1477,21 +1259,6 @@ def main(
         print(f"Set default output_path: {output_details_path}")
     evaluate(df, output_path, output_details_path)
 
-#main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
+
 if __name__ == '__main__':
     fire.Fire(main)
-    #main()
-    """
-    # main(sys.argv[1], sys.argv[2], sys.argv[3])
-    # main('Refs.xml', 'Cands2.xml', 'Results.json')
-    # ref_file_path = 'data/webnlg_data/release_v3.0/en/test/semantic-parsing-test-data-with-refs-en.xml'
-    # cand_file_path = 'results/vocab_dbpedia_triples_with_reverse _20230309-113542_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_rebel.tsv'
-    input_file_path = 'results/llama/vicuna-7b-with-explanasion-correct.csv'
-
-    output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct.json'
-    output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-correct_details.json'
-    
-
-    # main(ref_file_path, cand_file_path,output_path, output_details_path)
-    main(input_file_path, output_path, output_details_path)
-    """
