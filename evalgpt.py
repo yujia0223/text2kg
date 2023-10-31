@@ -1006,6 +1006,76 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     combination_selected = []
     triple_score_sum = []
 
+    """
+    Matching redo ideas:
+    - Need some way to remove ref triples that have already been used.
+    - Still want to match up those triples that most agree with each other.
+    - Possibly need to create synthetic results for placing all extra triples as spurious.
+    - Some sort of error earlier on as well (seems for partial match something has to exactly match in one position).
+    - Essentially, if we think of it like a matrix, choose one from each row and one from each column.
+    - Priority queue idea, for each candidate store everything in priority queue, use this to get best overall.
+    """
+    prio_cand_list = []
+    cands = []
+    test = []
+    # Add in all items to queue and priority queue
+    for i,_ in enumerate(new_cand_list):
+        cand_queue = Queue()
+        cand_prio = []
+        #DEBUG: print(len(new_cand_list[i]), len(new_ref_list[i]))
+        for cand_ind in range(len(new_cand_list[i])):
+            prio = PriorityQueue()
+            test_tmp = []
+            for ref_ind in range(len(new_ref_list[i])):
+                collected_scores = total_sem_eval_list[i][cand_ind][ref_ind]
+                f1_score = statistics.mean([collected_scores['ent_type']['f1'], collected_scores['partial']['f1'], collected_scores['strict']['f1'], collected_scores['exact']['f1']])
+                prio.put((-f1_score, ref_ind), block=False)
+                test_tmp.append((-f1_score, ref_ind))
+            cand_prio.append(prio)
+            cand_queue.put(cand_ind, block=False)
+            test.append(test_tmp)
+        cands.append(cand_queue)
+        prio_cand_list.append(cand_prio)
+    #DEBUG: print(test)
+    # Go through priority lists, extract highest combination. At each step, we take an element from the priority queue,
+    # check if it is the highest score seen for the given reference. If it isn't replace with the new score, and add
+    # the candidate back. Otherwise, check to see if at the given candidate we could get a higher overall score, by
+    # seeing if current element plus top of originally chosen candidate give a higher overall score.
+    for i in range(len(cands)):
+        total_dict = {'totalscore': 0}
+        collected_sem_eval = []
+        collected_sem_eval_per_tag = []
+        ref_dict = dict()  # Stores ref as key, (F1, cand) as value.
+        while(not cands[i].empty()):
+            ind = cands[i].get()
+            score_ref = prio_cand_list[i][ind].get()
+            #DEBUG: print(ind, score_ref)
+            if score_ref[1] not in ref_dict:
+                ref_dict[score_ref[1]] = (-score_ref[0], ind)
+            elif ref_dict[score_ref[1]][0] < -score_ref[0]:
+                cands[i].put(ref_dict[score_ref[1]][1], block=False)
+                ref_dict[score_ref[1]] = (-score_ref[0], ind)
+            elif -(prio_cand_list[i][ref_dict[score_ref[1]][1]].queue[0][0]+score_ref[0]) > ref_dict[score_ref[1]][0]:
+                cands[i].put(ref_dict[score_ref[1]][1], block=False)
+                ref_dict[score_ref[1]] = (-score_ref[0], ind)
+            else:
+                cands[i].put(ind, block=False)  # Have to keep going until everything is matched
+        # Grab out all the combinations we ended up with
+        collected_combinations = []
+        for j in ref_dict.keys():
+            collected_combinations.append([ref_dict[j][1], j])
+            collected_sem_eval.append(total_sem_eval_list[i][ref_dict[j][1]][j])
+            collected_sem_eval_per_tag.append(total_sem_eval_list_per_tag[i][ref_dict[j][1]][j])
+            combi_score = ref_dict[j][0]
+            total_dict = {'totalscore': combi_score, 'combination': collected_combinations, 'sem_eval_list': collected_sem_eval,
+                        'sem_eval_per_tag_list': collected_sem_eval_per_tag}
+        triple_score.append(total_dict['sem_eval_list'])
+        combination_selected.append(total_dict['combination'])
+        ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
+        triple_score_sum.append(ent_type_dict)
+        selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
+    """
     # Get all the permutations of the number of scores given per candidate, so if there's 4 candidates, but 3 references, this part ensures that one of
     # The four will not be scored
     for idx, candidate in enumerate(new_cand_list):
@@ -1089,7 +1159,7 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
         triple_score_sum.append(ent_type_dict)
         selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
         selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
-
+    """
     all_dict = {}
     all_dict.update({'Total_scores': {}})
 
