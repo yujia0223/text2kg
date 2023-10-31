@@ -19,7 +19,6 @@ from sklearn.exceptions import UndefinedMetricWarning
 simplefilter(action='ignore', category=UndefinedMetricWarning)
 import os
 import regex as re
-import itertools
 import statistics
 import sys
 from nervaluate import Evaluator
@@ -29,8 +28,8 @@ import string
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn import preprocessing
 import json
+from queue import PriorityQueue, Queue
 
-import ast
 import numpy as np
 import timeit
 
@@ -38,15 +37,14 @@ device = "cuda"
 currentpath = os.getcwd()
 
 def benchmark(
-    model_path: str = "",
-    tok: str = "",
-    max_tokens: int = 1024,
-    dump: str = "output.pickle",
-    load_8bit: bool = False,
-    error: str = "errors0.txt",
+    model_path: str = "",  # Path to the model
+    tok: str = "",  # Path to tokenizer, will default to model path
+    max_tokens: int = 1024,  # Maximum number of tokens the model is allowed to generate
+    dump: str = "output.pickle",  # Output file to put raw results into
+    load_8bit: bool = False,  # Loads model in 8-bit, use for larger models
+    error: str = "errors0.txt",  # File to output any error messages that arise during inference
     prompt_template: str = "",  # The prompt template to use, will default to alpaca.
-    csv_file: str = None,  # New argument for CSV file
-    test: str = "UofA-LINGO/text_to_triplets_new_ins"
+    test: str = "UofA-LINGO/text_to_triplets_new_ins"  # Test dataset to load
 ):
     if model_path == "":
         print("Enter the path to the model. (python benchmark_and_evaluate.py --model_path=/home/tsadler/models/vicuna-7b)")
@@ -189,7 +187,7 @@ def split_ignore_quotes_and_underscore(input_string):
     return input_string
 
 
-def getCandsAndRefsFromCsv(df):
+def getCandsAndRefs(df):
     print(df.head())
 
     allcand_ids = df.index.values
@@ -312,19 +310,25 @@ def getCandsAndRefsFromCsv(df):
     return allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list
 
 
+# Finds all elements of l (ref) that match the first element of sl (cand). Then, starting at that index
+# if the sublist of l of length sl all match, returns the start and end indices of l that represent the
+# matching sublist.
 def findSubList(sl,l):
     sll=len(sl)
-    #DEBUG: print([i for i,e in enumerate(l) if e==sl[0]])
+    #print([(i,e) for i,e in enumerate(l)])
+    #print([e==sl[0] for i,e in enumerate(l)])
     for ind in (i for i,e in enumerate(l) if e==sl[0]):
         if l[ind:ind+sll]==sl:
             return ind,ind+sll-1
 
 #We are going to try to find matches with the reference, starting with the highest chunk possible (all the words in the reference).
-#If we don't find that, we are going to search for all n-grams -1 the number of words in the reference; than -2; than -3; etc.
+#If we don't find that, we are going to search for all n-grams -1 the number of words in the reference; then -2; then -3; etc.
 def nonRefWords(new_ref_list, new_cand_list, foundnum, ngram_length):
     while ngram_length > 0:
         #Get a list of all the ngrams of that size
         ngram_list = list(ngrams(new_cand_list, ngram_length))
+        if ngram_list == []:
+            print("Empty ngram")
         #DEBUG: print("Ngram:", ngram_list)
         for ngram in ngram_list:
             #If we find this ngram (in the same order) in the reference
@@ -559,6 +563,7 @@ def evaluateRefCand(reference, candidate):
     predicate_found = False
     object_found = False
 
+    # Only idx is used here
     for idx, attrib in enumerate(index_triple):
         #Let's go over each attribute of the triple one by one
         try:
@@ -574,9 +579,13 @@ def evaluateRefCand(reference, candidate):
             print("candidate:",candidate)
             exit(0)
 
+        # Tokenization generally splits on brackets, for example (turn_me_on_(album) became
+        # ['(', 'turn_me_on_', '(', 'album', ')']
         ref_list = nltk.word_tokenize(refsub)
         cand_list = nltk.word_tokenize(candsub)
 
+        # Removing some punctuation / extra characters such as brackets
+        # The above becomes ['turn_me_on_', 'album']
         ref_list = [x.lower() for x in ref_list if re.search(r'^[' + re.escape(string.punctuation) + r']+$', x) == None]
         cand_list = [x.lower() for x in cand_list if re.search(r'^[' + re.escape(string.punctuation) + r']+$', x) == None]
         #DEBUG: print("Ref List:", ref_list)
@@ -781,7 +790,6 @@ def evaluateRefCand(reference, candidate):
 
     all_ref_dict = subject_ref_list + predicate_ref_list + object_ref_list
     all_cand_dict = subject_cand_list + predicate_cand_list + object_cand_list
-    all_total_list = subject_total_list + predicate_total_list + object_total_list
 
     evaluator = Evaluator([all_ref_dict], [all_cand_dict], tags=['SUB', 'PRED', 'OBJ'])
 
@@ -860,6 +868,76 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     combination_selected = []
     triple_score_sum = []
 
+    """
+    Matching redo ideas:
+    - Need some way to remove ref triples that have already been used.
+    - Still want to match up those triples that most agree with each other.
+    - Possibly need to create synthetic results for placing all extra triples as spurious.
+    - Some sort of error earlier on as well (seems for partial match something has to exactly match in one position).
+    - Essentially, if we think of it like a matrix, choose one from each row and one from each column.
+    - Priority queue idea, for each candidate store everything in priority queue, use this to get best overall.
+    """
+    prio_cand_list = []
+    cands = []
+    test = []
+    # Add in all items to queue and priority queue
+    for i,_ in enumerate(new_cand_list):
+        cand_queue = Queue()
+        cand_prio = []
+        #DEBUG: print(len(new_cand_list[i]), len(new_ref_list[i]))
+        for cand_ind in range(len(new_cand_list[i])):
+            prio = PriorityQueue()
+            test_tmp = []
+            for ref_ind in range(len(new_ref_list[i])):
+                collected_scores = total_sem_eval_list[i][cand_ind][ref_ind]
+                f1_score = statistics.mean([collected_scores['ent_type']['f1'], collected_scores['partial']['f1'], collected_scores['strict']['f1'], collected_scores['exact']['f1']])
+                prio.put((-f1_score, ref_ind), block=False)
+                test_tmp.append((-f1_score, ref_ind))
+            cand_prio.append(prio)
+            cand_queue.put(cand_ind, block=False)
+            test.append(test_tmp)
+        cands.append(cand_queue)
+        prio_cand_list.append(cand_prio)
+    #DEBUG: print(test)
+    # Go through priority lists, extract highest combination. At each step, we take an element from the priority queue,
+    # check if it is the highest score seen for the given reference. If it isn't replace with the new score, and add
+    # the candidate back. Otherwise, check to see if at the given candidate we could get a higher overall score, by
+    # seeing if current element plus top of originally chosen candidate give a higher overall score.
+    for i in range(len(cands)):
+        total_dict = {'totalscore': 0}
+        collected_sem_eval = []
+        collected_sem_eval_per_tag = []
+        ref_dict = dict()  # Stores ref as key, (F1, cand) as value.
+        while(not cands[i].empty()):
+            ind = cands[i].get()
+            score_ref = prio_cand_list[i][ind].get()
+            #DEBUG: print(ind, score_ref)
+            if score_ref[1] not in ref_dict:
+                ref_dict[score_ref[1]] = (-score_ref[0], ind)
+            elif ref_dict[score_ref[1]][0] < -score_ref[0]:
+                cands[i].put(ref_dict[score_ref[1]][1], block=False)
+                ref_dict[score_ref[1]] = (-score_ref[0], ind)
+            elif -(prio_cand_list[i][ref_dict[score_ref[1]][1]].queue[0][0]+score_ref[0]) > ref_dict[score_ref[1]][0]:
+                cands[i].put(ref_dict[score_ref[1]][1], block=False)
+                ref_dict[score_ref[1]] = (-score_ref[0], ind)
+            else:
+                cands[i].put(ind, block=False)  # Have to keep going until everything is matched
+        # Grab out all the combinations we ended up with
+        collected_combinations = []
+        for j in ref_dict.keys():
+            collected_combinations.append([ref_dict[j][1], j])
+            collected_sem_eval.append(total_sem_eval_list[i][ref_dict[j][1]][j])
+            collected_sem_eval_per_tag.append(total_sem_eval_list_per_tag[i][ref_dict[j][1]][j])
+            combi_score = ref_dict[j][0]
+            total_dict = {'totalscore': combi_score, 'combination': collected_combinations, 'sem_eval_list': collected_sem_eval,
+                        'sem_eval_per_tag_list': collected_sem_eval_per_tag}
+        triple_score.append(total_dict['sem_eval_list'])
+        combination_selected.append(total_dict['combination'])
+        ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
+        triple_score_sum.append(ent_type_dict)
+        selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
+    """
     # Get all the permutations of the number of scores given per candidate, so if there's 4 candidates, but 3 references, this part ensures that one of
     # The four will not be scored
     for idx, candidate in enumerate(new_cand_list):
@@ -895,7 +973,7 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
         triple_score_sum.append(ent_type_dict)
         selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
         selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
-
+        """
     all_dict = {}
     all_dict.update({'Total_scores': {}})
 
@@ -1199,7 +1277,7 @@ def calculateExactTripleScore(ref_list, cand_list, all_dict):
 
 
 def evaluate(input_dataframe, outputfile_overall, outputfile_details):
-    allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list = getCandsAndRefsFromCsv(input_dataframe)
+    allcand_ids, all_text, all_cand_triples, new_cand_list, all_ref_triples, new_ref_list = getCandsAndRefs(input_dataframe)
     starting_time = timeit.default_timer()
     print("Start time :",starting_time)
     # For each entry, calculate ALL possible scores for every combination of candidate and reference triple
@@ -1209,10 +1287,14 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     # Get best score for each entry (essentially, try to pick the one that actually matched up the triples correctly)
     all_dict, triple_score, combination_selected, triple_score_sum = calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_ref_list, new_cand_list)
     function2_time = timeit.default_timer() 
-    print("calculate all score time :", function2_time - function1_time)
+    print("calculate system score time :", function2_time - function1_time)
     all_dict2 = calculateExactTripleScore(all_ref_triples, all_cand_triples, all_dict)
-    with open(outputfile_overall, 'w') as outfile:
-        json.dump(all_dict2, outfile)
+    keys_scores = ['Ent_type', 'Partial', 'Exact', 'Strict']
+    keys_metrics = ['Precision', 'Recall', 'F1']
+    for key in keys_scores:
+        print(f"For {key}:\nPrecision: {all_dict2['Total_scores'][key][keys_metrics[0]]}     Recall: {all_dict2['Total_scores'][key][keys_metrics[1]]}     F1: {all_dict2['Total_scores'][key][keys_metrics[2]]}\n")
+    #with open(outputfile_overall, 'w') as outfile:
+    #    json.dump(all_dict2, outfile)
 
     all = {}
     all['id'] = allcand_ids.tolist()
@@ -1241,16 +1323,20 @@ def main(
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
+    pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/mistral-7b-at-sft.pickle'
     if pickle == "":
         df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test, load_8bit=load_8bit)
     else:
         output = pd.read_pickle(pickle)
         print(len(output.values()))
         dt = load_dataset(test)
-        df = pd.DataFrame(dt["test"])
+        df = pd.DataFrame(dt["test"])#.iloc[:1]
         df["gt"] = df["output"]
         df = df.drop(columns=["output"])
+        #op = [['(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | producer | Wharton_Tiers)\n(Turn_Me_On_(album) | runtime | 35.1)']]#\n(Turn_Me_On | artist | Wharton)']]
+        #op = [['(Turn_Me_On_(album) | producer | Wharton_Tiers)']]
         df["model_output"] = [x[0] for x in output.values()]
+        #df["model_output"] = [x[0] for x in op][:1]
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
         print(f"Set default output_path: {output_path}")
