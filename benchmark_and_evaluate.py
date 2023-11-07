@@ -861,6 +861,71 @@ def sumAllCombination(selected_sem_eval_list):
     return all_dict
 
 
+def collectTripleScores(total_dict):
+    selected_sem_eval_list = total_dict['sem_eval_list']
+    ent_type_correct = sum([x['ent_type']['correct'] for x in selected_sem_eval_list])
+    ent_type_incorrect = sum([x['ent_type']['incorrect'] for x in selected_sem_eval_list])
+    ent_type_partial = sum([x['ent_type']['partial'] for x in selected_sem_eval_list])
+    ent_type_missed = sum([x['ent_type']['missed'] for x in selected_sem_eval_list])
+    ent_type_spurious = sum([x['ent_type']['spurious'] for x in selected_sem_eval_list])
+    ent_type_possible = sum([x['ent_type']['possible'] for x in selected_sem_eval_list])
+    ent_type_actual = sum([x['ent_type']['actual'] for x in selected_sem_eval_list])
+    ent_type_precision = statistics.mean([x['ent_type']['precision'] for x in selected_sem_eval_list])
+    ent_type_recall = statistics.mean([x['ent_type']['recall'] for x in selected_sem_eval_list])
+    ent_type_f1 = statistics.mean([x['ent_type']['f1'] for x in selected_sem_eval_list])
+    ent_type_dict = {'Ent_type': {'correct': ent_type_correct, 'incorrect': ent_type_incorrect, 'partial': ent_type_partial, 'missed': ent_type_missed,
+                                'spurious': ent_type_spurious, 'possible': ent_type_possible, 'actual': ent_type_actual, 'precision': ent_type_precision,
+                                'recall': ent_type_recall, 'f1': ent_type_f1}}
+
+    partial_correct = sum([x['partial']['correct'] for x in selected_sem_eval_list])
+    partial_incorrect = sum([x['partial']['incorrect'] for x in selected_sem_eval_list])
+    partial_partial = sum([x['partial']['partial'] for x in selected_sem_eval_list])
+    partial_missed = sum([x['partial']['missed'] for x in selected_sem_eval_list])
+    partial_spurious = sum([x['partial']['spurious'] for x in selected_sem_eval_list])
+    partial_possible = sum([x['partial']['possible'] for x in selected_sem_eval_list])
+    partial_actual = sum([x['partial']['actual'] for x in selected_sem_eval_list])
+    partial_precision = statistics.mean([x['partial']['precision'] for x in selected_sem_eval_list])
+    partial_recall = statistics.mean([x['partial']['recall'] for x in selected_sem_eval_list])
+    partial_f1 = statistics.mean([x['partial']['f1'] for x in selected_sem_eval_list])
+    partial_dict = {'Partial': {'correct': partial_correct, 'incorrect': partial_incorrect, 'partial': partial_partial, 'missed': partial_missed,
+                                'spurious': partial_spurious, 'possible': partial_possible, 'actual': partial_actual, 'precision': partial_precision,
+                                'recall': partial_recall, 'f1': partial_f1}}
+
+    strict_correct = sum([x['strict']['correct'] for x in selected_sem_eval_list])
+    strict_incorrect = sum([x['strict']['incorrect'] for x in selected_sem_eval_list])
+    strict_partial = sum([x['strict']['partial'] for x in selected_sem_eval_list])
+    strict_missed = sum([x['strict']['missed'] for x in selected_sem_eval_list])
+    strict_spurious = sum([x['strict']['spurious'] for x in selected_sem_eval_list])
+    strict_possible = sum([x['strict']['possible'] for x in selected_sem_eval_list])
+    strict_actual = sum([x['strict']['actual'] for x in selected_sem_eval_list])
+    strict_precision = statistics.mean([x['strict']['precision'] for x in selected_sem_eval_list])
+    strict_recall = statistics.mean([x['strict']['recall'] for x in selected_sem_eval_list])
+    strict_f1 = statistics.mean([x['strict']['f1'] for x in selected_sem_eval_list])
+    strict_dict = {'Strict': {'correct': strict_correct, 'incorrect': strict_incorrect, 'partial': strict_partial, 'missed': strict_missed,
+                                'spurious': strict_spurious, 'possible': strict_possible, 'actual': strict_actual, 'precision': strict_precision,
+                                'recall': strict_recall, 'f1': strict_f1}}
+
+    exact_correct = sum([x['exact']['correct'] for x in selected_sem_eval_list])
+    exact_incorrect = sum([x['exact']['incorrect'] for x in selected_sem_eval_list])
+    exact_partial = sum([x['exact']['partial'] for x in selected_sem_eval_list])
+    exact_missed = sum([x['exact']['missed'] for x in selected_sem_eval_list])
+    exact_spurious = sum([x['exact']['spurious'] for x in selected_sem_eval_list])
+    exact_possible = sum([x['exact']['possible'] for x in selected_sem_eval_list])
+    exact_actual = sum([x['exact']['actual'] for x in selected_sem_eval_list])
+    exact_precision = statistics.mean([x['exact']['precision'] for x in selected_sem_eval_list])
+    exact_recall = statistics.mean([x['exact']['recall'] for x in selected_sem_eval_list])
+    exact_f1 = statistics.mean([x['exact']['f1'] for x in selected_sem_eval_list])
+    exact_dict = {'Exact': {'correct': exact_correct, 'incorrect': exact_incorrect, 'partial': exact_partial, 'missed': exact_missed,
+                                'spurious': exact_spurious, 'possible': exact_possible, 'actual': exact_actual, 'precision': exact_precision,
+                                'recall': exact_recall, 'f1': exact_f1}}
+    
+    collected_dict = {"ent_type": ent_type_dict['Ent_type'],
+                      "partial": partial_dict['Partial'],
+                      "exact": exact_dict['Exact'],
+                      "strict": strict_dict['Strict']}
+    return collected_dict
+
+
 def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_ref_list, new_cand_list):
     selected_sem_eval_list = []
     selected_sem_eval_list_per_tag = []
@@ -868,6 +933,70 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     combination_selected = []
     triple_score_sum = []
 
+
+    """
+    Reference based approach, that is we take priority queues along all references instead.
+    """
+    """
+    prio_ref_list = []
+    refs = []
+    test = []
+    for i,_ in enumerate(new_ref_list):
+        ref_queue = Queue()
+        ref_prio = []
+        for ref_ind in range(len(new_ref_list[i])):
+            prio = PriorityQueue()
+            test_tmp = []
+            for cand_ind in range(len(new_cand_list[i])):
+                collected_scores = total_sem_eval_list[i][cand_ind][ref_ind]
+                f1_score = statistics.mean([collected_scores['ent_type']['f1'], collected_scores['partial']['f1'], collected_scores['strict']['f1'], collected_scores['exact']['f1']])
+                prio.put((-f1_score, cand_ind), block=False)
+                test_tmp.append((-f1_score, cand_ind))
+            ref_prio.append(prio)
+            ref_queue.put(ref_ind, block=False)
+            test.append(test_tmp)
+        refs.append(ref_queue)
+        prio_ref_list.append(ref_prio)
+    # Go through priority lists, extract highest combination. At each step, we take an element from the priority queue,
+    # check if it is the highest score seen for the given reference. If it isn't replace with the new score, and add
+    # the candidate back. Otherwise, check to see if at the given candidate we could get a higher overall score, by
+    # seeing if current element plus top of originally chosen candidate give a higher overall score.
+    for i in range(len(refs)):
+        total_dict = {'totalscore': 0}
+        collected_sem_eval = []
+        collected_sem_eval_per_tag = []
+        cand_dict = dict()  # Stores ref as key, (F1, cand) as value.
+        while(not refs[i].empty()):
+            ind = refs[i].get()
+            score_cand = prio_ref_list[i][ind].get()
+            #DEBUG: print(ind, score_ref)
+            if score_cand[1] not in cand_dict:
+                cand_dict[score_cand[1]] = (-score_cand[0], ind)
+            elif cand_dict[score_cand[1]][0] < -score_cand[0]:
+                refs[i].put(cand_dict[score_cand[1]][1], block=False)
+                cand_dict[score_cand[1]] = (-score_cand[0], ind)
+            # Comment out these lines for candidate based greedy approach
+            # elif -(prio_cand_list[i][cand_dict[score_cand[1]][1]].queue[0][0]+score_cand[0]) > cand_dict[score_cand[1]][0]:
+            #     refs[i].put(cand_dict[score_cand[1]][1], block=False)
+            #     cand_dict[score_cand[1]] = (-score_cand[0], ind)
+            else:
+                refs[i].put(ind, block=False)  # Have to keep going until everything is matched
+        # Grab out all the combinations we ended up with
+        collected_combinations = []
+        for j in cand_dict.keys():
+            collected_combinations.append([j, cand_dict[j][1]])
+            collected_sem_eval.append(total_sem_eval_list[i][j][cand_dict[j][1]])
+            collected_sem_eval_per_tag.append(total_sem_eval_list_per_tag[i][j][cand_dict[j][1]])
+            combi_score = cand_dict[j][0]
+            total_dict = {'totalscore': combi_score, 'combination': collected_combinations, 'sem_eval_list': collected_sem_eval,
+                        'sem_eval_per_tag_list': collected_sem_eval_per_tag}
+        triple_score.append(total_dict['sem_eval_list'])
+        combination_selected.append(total_dict['combination'])
+        ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
+        triple_score_sum.append(ent_type_dict)
+        selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
+    """
     """
     Matching redo ideas:
     - Need some way to remove ref triples that have already been used.
@@ -877,6 +1006,7 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     - Essentially, if we think of it like a matrix, choose one from each row and one from each column.
     - Priority queue idea, for each candidate store everything in priority queue, use this to get best overall.
     """
+    
     prio_cand_list = []
     cands = []
     test = []
@@ -917,7 +1047,9 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
             elif ref_dict[score_ref[1]][0] < -score_ref[0]:
                 cands[i].put(ref_dict[score_ref[1]][1], block=False)
                 ref_dict[score_ref[1]] = (-score_ref[0], ind)
-            elif -(prio_cand_list[i][ref_dict[score_ref[1]][1]].queue[0][0]+score_ref[0]) > ref_dict[score_ref[1]][0]:
+            # Comment out these lines for candidate based greedy approach
+            # Subtraction as values in queue are negative
+            elif -(prio_cand_list[i][ref_dict[score_ref[1]][1]].queue[0][0]+score_ref[0]) > ref_dict[score_ref[1]][0]-prio_cand_list[i][ind].queue[0][0]:
                 cands[i].put(ref_dict[score_ref[1]][1], block=False)
                 ref_dict[score_ref[1]] = (-score_ref[0], ind)
             else:
@@ -935,7 +1067,9 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
         combination_selected.append(total_dict['combination'])
         ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
         triple_score_sum.append(ent_type_dict)
-        selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        #sem_eval = {"": total_dict['sem_eval_list']}
+        coll_dict = collectTripleScores(total_dict=total_dict)
+        selected_sem_eval_list = selected_sem_eval_list + [coll_dict]
         selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
     """
     # Get all the permutations of the number of scores given per candidate, so if there's 4 candidates, but 3 references, this part ensures that one of
@@ -971,9 +1105,12 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
         combination_selected.append(total_dict['combination'])
         ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
         triple_score_sum.append(ent_type_dict)
-        selected_sem_eval_list = selected_sem_eval_list + total_dict['sem_eval_list']
+        coll_dict = collectTripleScores(total_dict=total_dict)
+        selected_sem_eval_list = selected_sem_eval_list +total_dict['sem_eval_list']#+ [coll_dict]
         selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
-        """
+    """
+    # Comment above here to remove old alg
+    print("Entries to be averaged / summed:", len([x['ent_type']['precision'] for x in selected_sem_eval_list]))
     all_dict = {}
     all_dict.update({'Total_scores': {}})
 
@@ -1291,10 +1428,16 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     all_dict2 = calculateExactTripleScore(all_ref_triples, all_cand_triples, all_dict)
     keys_scores = ['Ent_type', 'Partial', 'Exact', 'Strict']
     keys_metrics = ['Precision', 'Recall', 'F1']
+    items = ['Correct', 'Incorrect', 'Partial', 'Missed', 'Spurious', 'Actual', 'Possible']
     for key in keys_scores:
         print(f"For {key}:\nPrecision: {all_dict2['Total_scores'][key][keys_metrics[0]]}     Recall: {all_dict2['Total_scores'][key][keys_metrics[1]]}     F1: {all_dict2['Total_scores'][key][keys_metrics[2]]}\n")
-    #with open(outputfile_overall, 'w') as outfile:
-    #    json.dump(all_dict2, outfile)
+    for key in keys_scores:
+        print(f"For {key}:")
+        for item in items:
+            print(f"{item}: {all_dict2['Total_scores'][key][item]}", end=", ")
+        print()
+    with open(outputfile_overall, 'w') as outfile:
+        json.dump(all_dict2, outfile)
 
     all = {}
     all['id'] = allcand_ids.tolist()
@@ -1323,18 +1466,21 @@ def main(
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/mistral-7b-at-sft.pickle'
+    #pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/vicuna-7b-combined-corr.pickle'
+    #test = "UofA-LINGO/webnlg-test-cleaned"
     if pickle == "":
         df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test, load_8bit=load_8bit)
     else:
         output = pd.read_pickle(pickle)
         print(len(output.values()))
         dt = load_dataset(test)
-        df = pd.DataFrame(dt["test"])#.iloc[:1]
+        df = pd.DataFrame(dt["test"])#.iloc[25:26]
         df["gt"] = df["output"]
         df = df.drop(columns=["output"])
-        #op = [['(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | producer | Wharton_Tiers)\n(Turn_Me_On_(album) | runtime | 35.1)']]#\n(Turn_Me_On | artist | Wharton)']]
-        #op = [['(Turn_Me_On_(album) | producer | Wharton_Tiers)']]
+        # Ind 0 in test
+        #op = [['(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | producer | Wharton_Tiers)\n(Turn_Me_On | artist | Wharton)']]
+        # Ind 25 in test
+        #op = [['(Nord_(album) | artist | Sludge_metal)\n(Nord | genre | Sludge_Metal)']]
         df["model_output"] = [x[0] for x in output.values()]
         #df["model_output"] = [x[0] for x in op][:1]
     if output_path == "":
