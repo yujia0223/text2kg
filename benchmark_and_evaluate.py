@@ -1578,8 +1578,8 @@ def main(
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/orca-mini-3-7b-at-sft-ske.pickle'
-    test = "UofA-LINGO/ske-test"
+    #pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/orca-mini-3-7b-at-sft-ske.pickle'
+    #test = "UofA-LINGO/ske-test"
     if pickle == "":
         df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test, load_8bit=load_8bit)
     else:
