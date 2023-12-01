@@ -156,6 +156,7 @@ def benchmark(
                 s = torch.tensor([1,2])
         output = tokenizer.decode(s)
         #DEBUG: print(output)
+        torch.cuda.empty_cache()
         yield prompter.get_response(output)
 
     dt = load_dataset(test)
@@ -796,7 +797,6 @@ def evaluateRefCand(reference, candidate):
     # Returns overall metrics and metrics for each tag
 
     results, results_per_tag = evaluator.evaluate()
-
     return results, results_per_tag
 
 
@@ -861,8 +861,12 @@ def sumAllCombination(selected_sem_eval_list):
     return all_dict
 
 
-def collectTripleScores(total_dict):
-    selected_sem_eval_list = total_dict['sem_eval_list']
+def collectTripleScores(selected_sem_eval_list, uppercase=False):
+    tags = ['correct','incorrect','partial','missed','spurious','possible','actual','precision','recall','f1']
+    # From original code, needed to have this function able to return uppercase or lowercase dict keys
+    if uppercase:
+        tags = ['Correct','Incorrect','Partial','Missed','Spurious','Possible','Actual','Precision','Recall','F1']
+
     ent_type_correct = sum([x['ent_type']['correct'] for x in selected_sem_eval_list])
     ent_type_incorrect = sum([x['ent_type']['incorrect'] for x in selected_sem_eval_list])
     ent_type_partial = sum([x['ent_type']['partial'] for x in selected_sem_eval_list])
@@ -873,9 +877,10 @@ def collectTripleScores(total_dict):
     ent_type_precision = statistics.mean([x['ent_type']['precision'] for x in selected_sem_eval_list])
     ent_type_recall = statistics.mean([x['ent_type']['recall'] for x in selected_sem_eval_list])
     ent_type_f1 = statistics.mean([x['ent_type']['f1'] for x in selected_sem_eval_list])
-    ent_type_dict = {'Ent_type': {'correct': ent_type_correct, 'incorrect': ent_type_incorrect, 'partial': ent_type_partial, 'missed': ent_type_missed,
-                                'spurious': ent_type_spurious, 'possible': ent_type_possible, 'actual': ent_type_actual, 'precision': ent_type_precision,
-                                'recall': ent_type_recall, 'f1': ent_type_f1}}
+    ent_type_dict = {'ent_type': {tags[0]: ent_type_correct, tags[1]: ent_type_incorrect, tags[2]: ent_type_partial,
+                                tags[3]: ent_type_missed, tags[4]: ent_type_spurious, tags[5]: ent_type_possible,
+                                tags[6]: ent_type_actual, tags[7]: ent_type_precision, tags[8]: ent_type_recall,
+                                tags[9]: ent_type_f1}}
 
     partial_correct = sum([x['partial']['correct'] for x in selected_sem_eval_list])
     partial_incorrect = sum([x['partial']['incorrect'] for x in selected_sem_eval_list])
@@ -887,9 +892,10 @@ def collectTripleScores(total_dict):
     partial_precision = statistics.mean([x['partial']['precision'] for x in selected_sem_eval_list])
     partial_recall = statistics.mean([x['partial']['recall'] for x in selected_sem_eval_list])
     partial_f1 = statistics.mean([x['partial']['f1'] for x in selected_sem_eval_list])
-    partial_dict = {'Partial': {'correct': partial_correct, 'incorrect': partial_incorrect, 'partial': partial_partial, 'missed': partial_missed,
-                                'spurious': partial_spurious, 'possible': partial_possible, 'actual': partial_actual, 'precision': partial_precision,
-                                'recall': partial_recall, 'f1': partial_f1}}
+    partial_dict = {'partial': {tags[0]: partial_correct, tags[1]: partial_incorrect, tags[2]: partial_partial,
+                                tags[3]: partial_missed, tags[4]: partial_spurious, tags[5]: partial_possible,
+                                tags[6]: partial_actual, tags[7]: partial_precision, tags[8]: partial_recall,
+                                tags[9]: partial_f1}}
 
     strict_correct = sum([x['strict']['correct'] for x in selected_sem_eval_list])
     strict_incorrect = sum([x['strict']['incorrect'] for x in selected_sem_eval_list])
@@ -901,9 +907,10 @@ def collectTripleScores(total_dict):
     strict_precision = statistics.mean([x['strict']['precision'] for x in selected_sem_eval_list])
     strict_recall = statistics.mean([x['strict']['recall'] for x in selected_sem_eval_list])
     strict_f1 = statistics.mean([x['strict']['f1'] for x in selected_sem_eval_list])
-    strict_dict = {'Strict': {'correct': strict_correct, 'incorrect': strict_incorrect, 'partial': strict_partial, 'missed': strict_missed,
-                                'spurious': strict_spurious, 'possible': strict_possible, 'actual': strict_actual, 'precision': strict_precision,
-                                'recall': strict_recall, 'f1': strict_f1}}
+    strict_dict = {'strict': {tags[0]: strict_correct, tags[1]: strict_incorrect, tags[2]: strict_partial,
+                                tags[3]: strict_missed, tags[4]: strict_spurious, tags[5]: strict_possible,
+                                tags[6]: strict_actual, tags[7]: strict_precision, tags[8]: strict_recall,
+                                tags[9]: strict_f1}}
 
     exact_correct = sum([x['exact']['correct'] for x in selected_sem_eval_list])
     exact_incorrect = sum([x['exact']['incorrect'] for x in selected_sem_eval_list])
@@ -915,14 +922,98 @@ def collectTripleScores(total_dict):
     exact_precision = statistics.mean([x['exact']['precision'] for x in selected_sem_eval_list])
     exact_recall = statistics.mean([x['exact']['recall'] for x in selected_sem_eval_list])
     exact_f1 = statistics.mean([x['exact']['f1'] for x in selected_sem_eval_list])
-    exact_dict = {'Exact': {'correct': exact_correct, 'incorrect': exact_incorrect, 'partial': exact_partial, 'missed': exact_missed,
-                                'spurious': exact_spurious, 'possible': exact_possible, 'actual': exact_actual, 'precision': exact_precision,
-                                'recall': exact_recall, 'f1': exact_f1}}
-    
-    collected_dict = {"ent_type": ent_type_dict['Ent_type'],
-                      "partial": partial_dict['Partial'],
-                      "exact": exact_dict['Exact'],
-                      "strict": strict_dict['Strict']}
+    exact_dict = {'exact': {tags[0]: exact_correct, tags[1]: exact_incorrect, tags[2]: exact_partial,
+                            tags[3]: exact_missed, tags[4]: exact_spurious, tags[5]: exact_possible,
+                            tags[6]: exact_actual, tags[7]: exact_precision, tags[8]: exact_recall,
+                            tags[9]: exact_f1}}
+    if not uppercase:
+        collected_dict = {"ent_type": ent_type_dict['ent_type'],
+                        "partial": partial_dict['partial'],
+                        "exact": exact_dict['exact'],
+                        "strict": strict_dict['strict']}
+    else:
+        collected_dict = {"Ent_type": ent_type_dict['ent_type'],
+                        "Partial": partial_dict['partial'],
+                        "Exact": exact_dict['exact'],
+                        "Strict": strict_dict['strict']}
+    return collected_dict
+
+
+def collectTagScores(selected_sem_eval_list, tag, uppercase=False):
+    tags = ['correct','incorrect','partial','missed','spurious','possible','actual','precision','recall','f1']
+    # From original code, needed to have this function able to return uppercase or lowercase dict keys
+    if uppercase:
+        tags = ['Correct','Incorrect','Partial','Missed','Spurious','Possible','Actual','Precision','Recall','F1']
+
+    ent_type_correct = sum([x[tag]['ent_type']['correct'] for x in selected_sem_eval_list])
+    ent_type_incorrect = sum([x[tag]['ent_type']['incorrect'] for x in selected_sem_eval_list])
+    ent_type_partial = sum([x[tag]['ent_type']['partial'] for x in selected_sem_eval_list])
+    ent_type_missed = sum([x[tag]['ent_type']['missed'] for x in selected_sem_eval_list])
+    ent_type_spurious = sum([x[tag]['ent_type']['spurious'] for x in selected_sem_eval_list])
+    ent_type_possible = sum([x[tag]['ent_type']['possible'] for x in selected_sem_eval_list])
+    ent_type_actual = sum([x[tag]['ent_type']['actual'] for x in selected_sem_eval_list])
+    ent_type_precision = statistics.mean([x[tag]['ent_type']['precision'] for x in selected_sem_eval_list])
+    ent_type_recall = statistics.mean([x[tag]['ent_type']['recall'] for x in selected_sem_eval_list])
+    ent_type_f1 = statistics.mean([x[tag]['ent_type']['f1'] for x in selected_sem_eval_list])
+    ent_type_dict = {'ent_type': {tags[0]: ent_type_correct, tags[1]: ent_type_incorrect, tags[2]: ent_type_partial,
+                                tags[3]: ent_type_missed, tags[4]: ent_type_spurious, tags[5]: ent_type_possible,
+                                tags[6]: ent_type_actual, tags[7]: ent_type_precision, tags[8]: ent_type_recall,
+                                tags[9]: ent_type_f1}}
+
+    partial_correct = sum([x[tag]['partial']['correct'] for x in selected_sem_eval_list])
+    partial_incorrect = sum([x[tag]['partial']['incorrect'] for x in selected_sem_eval_list])
+    partial_partial = sum([x[tag]['partial']['partial'] for x in selected_sem_eval_list])
+    partial_missed = sum([x[tag]['partial']['missed'] for x in selected_sem_eval_list])
+    partial_spurious = sum([x[tag]['partial']['spurious'] for x in selected_sem_eval_list])
+    partial_possible = sum([x[tag]['partial']['possible'] for x in selected_sem_eval_list])
+    partial_actual = sum([x[tag]['partial']['actual'] for x in selected_sem_eval_list])
+    partial_precision = statistics.mean([x[tag]['partial']['precision'] for x in selected_sem_eval_list])
+    partial_recall = statistics.mean([x[tag]['partial']['recall'] for x in selected_sem_eval_list])
+    partial_f1 = statistics.mean([x[tag]['partial']['f1'] for x in selected_sem_eval_list])
+    partial_dict = {'partial': {tags[0]: partial_correct, tags[1]: partial_incorrect, tags[2]: partial_partial,
+                                tags[3]: partial_missed, tags[4]: partial_spurious, tags[5]: partial_possible,
+                                tags[6]: partial_actual, tags[7]: partial_precision, tags[8]: partial_recall,
+                                tags[9]: partial_f1}}
+
+    strict_correct = sum([x[tag]['strict']['correct'] for x in selected_sem_eval_list])
+    strict_incorrect = sum([x[tag]['strict']['incorrect'] for x in selected_sem_eval_list])
+    strict_partial = sum([x[tag]['strict']['partial'] for x in selected_sem_eval_list])
+    strict_missed = sum([x[tag]['strict']['missed'] for x in selected_sem_eval_list])
+    strict_spurious = sum([x[tag]['strict']['spurious'] for x in selected_sem_eval_list])
+    strict_possible = sum([x[tag]['strict']['possible'] for x in selected_sem_eval_list])
+    strict_actual = sum([x[tag]['strict']['actual'] for x in selected_sem_eval_list])
+    strict_precision = statistics.mean([x[tag]['strict']['precision'] for x in selected_sem_eval_list])
+    strict_recall = statistics.mean([x[tag]['strict']['recall'] for x in selected_sem_eval_list])
+    strict_f1 = statistics.mean([x[tag]['strict']['f1'] for x in selected_sem_eval_list])
+    strict_dict = {'strict': {tags[0]: strict_correct, tags[1]: strict_incorrect, tags[2]: strict_partial,
+                                tags[3]: strict_missed, tags[4]: strict_spurious, tags[5]: strict_possible,
+                                tags[6]: strict_actual, tags[7]: strict_precision, tags[8]: strict_recall,
+                                tags[9]: strict_f1}}
+
+    exact_correct = sum([x[tag]['exact']['correct'] for x in selected_sem_eval_list])
+    exact_incorrect = sum([x[tag]['exact']['incorrect'] for x in selected_sem_eval_list])
+    exact_partial = sum([x[tag]['exact']['partial'] for x in selected_sem_eval_list])
+    exact_missed = sum([x[tag]['exact']['missed'] for x in selected_sem_eval_list])
+    exact_spurious = sum([x[tag]['exact']['spurious'] for x in selected_sem_eval_list])
+    exact_possible = sum([x[tag]['exact']['possible'] for x in selected_sem_eval_list])
+    exact_actual = sum([x[tag]['exact']['actual'] for x in selected_sem_eval_list])
+    exact_precision = statistics.mean([x[tag]['exact']['precision'] for x in selected_sem_eval_list])
+    exact_recall = statistics.mean([x[tag]['exact']['recall'] for x in selected_sem_eval_list])
+    exact_f1 = statistics.mean([x[tag]['exact']['f1'] for x in selected_sem_eval_list])
+    exact_dict = {'exact': {tags[0]: exact_correct, tags[1]: exact_incorrect, tags[2]: exact_partial,
+                            tags[3]: exact_missed, tags[4]: exact_spurious, tags[5]: exact_possible,
+                            tags[6]: exact_actual, tags[7]: exact_precision, tags[8]: exact_recall,
+                            tags[9]: exact_f1}}
+    if not uppercase:
+        collected_dict = {"ent_type": ent_type_dict['ent_type'],
+                        "partial": partial_dict['partial'],
+                        "exact": exact_dict['exact'],
+                        "strict": strict_dict['strict']}
+    else:
+        collected_dict = {"Ent_type": ent_type_dict['ent_type'],
+                        "Partial": partial_dict['partial'],
+                        "Exact": exact_dict['exact'],
+                        "Strict": strict_dict['strict']}
     return collected_dict
 
 
@@ -1067,10 +1158,14 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
         combination_selected.append(total_dict['combination'])
         ent_type_dict = sumAllCombination(total_dict['sem_eval_list'])
         triple_score_sum.append(ent_type_dict)
-        #sem_eval = {"": total_dict['sem_eval_list']}
-        coll_dict = collectTripleScores(total_dict=total_dict)
+        coll_dict = collectTripleScores(selected_sem_eval_list=total_dict['sem_eval_list'])
         selected_sem_eval_list = selected_sem_eval_list + [coll_dict]
-        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + total_dict['sem_eval_per_tag_list']
+        tag_dict = dict()
+        tag_dict['SUB'] = collectTagScores(total_dict['sem_eval_per_tag_list'], 'SUB')
+        tag_dict['PRED'] = collectTagScores(total_dict['sem_eval_per_tag_list'], 'PRED')
+        tag_dict['OBJ'] = collectTagScores(total_dict['sem_eval_per_tag_list'], 'OBJ')
+        selected_sem_eval_list_per_tag = selected_sem_eval_list_per_tag + [tag_dict]#total_dict['sem_eval_per_tag_list']
+
     """
     # Get all the permutations of the number of scores given per candidate, so if there's 4 candidates, but 3 references, this part ensures that one of
     # The four will not be scored
@@ -1111,283 +1206,291 @@ def calculateSystemScore(total_sem_eval_list, total_sem_eval_list_per_tag, new_r
     """
     # Comment above here to remove old alg
     print("Entries to be averaged / summed:", len([x['ent_type']['precision'] for x in selected_sem_eval_list]))
-    all_dict = {}
-    all_dict.update({'Total_scores': {}})
+    all_dict = dict()
+    #all_dict.update({'Total_scores': {}})
 
-    ent_type_correct = sum([x['ent_type']['correct'] for x in selected_sem_eval_list])
-    ent_type_incorrect = sum([x['ent_type']['incorrect'] for x in selected_sem_eval_list])
-    ent_type_partial = sum([x['ent_type']['partial'] for x in selected_sem_eval_list])
-    ent_type_missed = sum([x['ent_type']['missed'] for x in selected_sem_eval_list])
-    ent_type_spurious = sum([x['ent_type']['spurious'] for x in selected_sem_eval_list])
-    ent_type_possible = sum([x['ent_type']['possible'] for x in selected_sem_eval_list])
-    ent_type_actual = sum([x['ent_type']['actual'] for x in selected_sem_eval_list])
-    ent_type_precision = statistics.mean([x['ent_type']['precision'] for x in selected_sem_eval_list])
-    ent_type_recall = statistics.mean([x['ent_type']['recall'] for x in selected_sem_eval_list])
-    ent_type_f1 = statistics.mean([x['ent_type']['f1'] for x in selected_sem_eval_list])
+    # ent_type_correct = sum([x['ent_type']['correct'] for x in selected_sem_eval_list])
+    # ent_type_incorrect = sum([x['ent_type']['incorrect'] for x in selected_sem_eval_list])
+    # ent_type_partial = sum([x['ent_type']['partial'] for x in selected_sem_eval_list])
+    # ent_type_missed = sum([x['ent_type']['missed'] for x in selected_sem_eval_list])
+    # ent_type_spurious = sum([x['ent_type']['spurious'] for x in selected_sem_eval_list])
+    # ent_type_possible = sum([x['ent_type']['possible'] for x in selected_sem_eval_list])
+    # ent_type_actual = sum([x['ent_type']['actual'] for x in selected_sem_eval_list])
+    # ent_type_precision = statistics.mean([x['ent_type']['precision'] for x in selected_sem_eval_list])
+    # ent_type_recall = statistics.mean([x['ent_type']['recall'] for x in selected_sem_eval_list])
+    # ent_type_f1 = statistics.mean([x['ent_type']['f1'] for x in selected_sem_eval_list])
 
-    ent_type_dict = {'Ent_type': {'Correct': ent_type_correct, 'Incorrect': ent_type_incorrect, 'Partial': ent_type_partial, 'Missed': ent_type_missed,
-                                'Spurious': ent_type_spurious, 'Possible': ent_type_possible, 'Actual': ent_type_actual, 'Precision': ent_type_precision,
-                                'Recall': ent_type_recall, 'F1': ent_type_f1}}
+    # ent_type_dict = {'Ent_type': {'Correct': ent_type_correct, 'Incorrect': ent_type_incorrect, 'Partial': ent_type_partial, 'Missed': ent_type_missed,
+    #                             'Spurious': ent_type_spurious, 'Possible': ent_type_possible, 'Actual': ent_type_actual, 'Precision': ent_type_precision,
+    #                             'Recall': ent_type_recall, 'F1': ent_type_f1}}
 
-    all_dict['Total_scores'].update(ent_type_dict)
+    # all_dict['Total_scores'].update(ent_type_dict)
 
-    partial_correct = sum([x['partial']['correct'] for x in selected_sem_eval_list])
-    partial_incorrect = sum([x['partial']['incorrect'] for x in selected_sem_eval_list])
-    partial_partial = sum([x['partial']['partial'] for x in selected_sem_eval_list])
-    partial_missed = sum([x['partial']['missed'] for x in selected_sem_eval_list])
-    partial_spurious = sum([x['partial']['spurious'] for x in selected_sem_eval_list])
-    partial_possible = sum([x['partial']['possible'] for x in selected_sem_eval_list])
-    partial_actual = sum([x['partial']['actual'] for x in selected_sem_eval_list])
-    partial_precision = statistics.mean([x['partial']['precision'] for x in selected_sem_eval_list])
-    partial_recall = statistics.mean([x['partial']['recall'] for x in selected_sem_eval_list])
-    partial_f1 = statistics.mean([x['partial']['f1'] for x in selected_sem_eval_list])
+    # partial_correct = sum([x['partial']['correct'] for x in selected_sem_eval_list])
+    # partial_incorrect = sum([x['partial']['incorrect'] for x in selected_sem_eval_list])
+    # partial_partial = sum([x['partial']['partial'] for x in selected_sem_eval_list])
+    # partial_missed = sum([x['partial']['missed'] for x in selected_sem_eval_list])
+    # partial_spurious = sum([x['partial']['spurious'] for x in selected_sem_eval_list])
+    # partial_possible = sum([x['partial']['possible'] for x in selected_sem_eval_list])
+    # partial_actual = sum([x['partial']['actual'] for x in selected_sem_eval_list])
+    # partial_precision = statistics.mean([x['partial']['precision'] for x in selected_sem_eval_list])
+    # partial_recall = statistics.mean([x['partial']['recall'] for x in selected_sem_eval_list])
+    # partial_f1 = statistics.mean([x['partial']['f1'] for x in selected_sem_eval_list])
 
-    partial_dict = {'Partial': {'Correct': partial_correct, 'Incorrect': partial_incorrect, 'Partial': partial_partial, 'Missed': partial_missed,
-                                'Spurious': partial_spurious, 'Possible': partial_possible, 'Actual': partial_actual, 'Precision': partial_precision,
-                                'Recall': partial_recall, 'F1': partial_f1}}
-    all_dict['Total_scores'].update(partial_dict)
+    # partial_dict = {'Partial': {'Correct': partial_correct, 'Incorrect': partial_incorrect, 'Partial': partial_partial, 'Missed': partial_missed,
+    #                             'Spurious': partial_spurious, 'Possible': partial_possible, 'Actual': partial_actual, 'Precision': partial_precision,
+    #                             'Recall': partial_recall, 'F1': partial_f1}}
+    # all_dict['Total_scores'].update(partial_dict)
 
-    strict_correct = sum([x['strict']['correct'] for x in selected_sem_eval_list])
-    strict_incorrect = sum([x['strict']['incorrect'] for x in selected_sem_eval_list])
-    strict_partial = sum([x['strict']['partial'] for x in selected_sem_eval_list])
-    strict_missed = sum([x['strict']['missed'] for x in selected_sem_eval_list])
-    strict_spurious = sum([x['strict']['spurious'] for x in selected_sem_eval_list])
-    strict_possible = sum([x['strict']['possible'] for x in selected_sem_eval_list])
-    strict_actual = sum([x['strict']['actual'] for x in selected_sem_eval_list])
-    strict_precision = statistics.mean([x['strict']['precision'] for x in selected_sem_eval_list])
-    strict_recall = statistics.mean([x['strict']['recall'] for x in selected_sem_eval_list])
-    strict_f1 = statistics.mean([x['strict']['f1'] for x in selected_sem_eval_list])
+    # strict_correct = sum([x['strict']['correct'] for x in selected_sem_eval_list])
+    # strict_incorrect = sum([x['strict']['incorrect'] for x in selected_sem_eval_list])
+    # strict_partial = sum([x['strict']['partial'] for x in selected_sem_eval_list])
+    # strict_missed = sum([x['strict']['missed'] for x in selected_sem_eval_list])
+    # strict_spurious = sum([x['strict']['spurious'] for x in selected_sem_eval_list])
+    # strict_possible = sum([x['strict']['possible'] for x in selected_sem_eval_list])
+    # strict_actual = sum([x['strict']['actual'] for x in selected_sem_eval_list])
+    # strict_precision = statistics.mean([x['strict']['precision'] for x in selected_sem_eval_list])
+    # strict_recall = statistics.mean([x['strict']['recall'] for x in selected_sem_eval_list])
+    # strict_f1 = statistics.mean([x['strict']['f1'] for x in selected_sem_eval_list])
 
-    strict_dict = {'Strict': {'Correct': strict_correct, 'Incorrect': strict_incorrect, 'Partial': strict_partial, 'Missed': strict_missed,
-                                'Spurious': strict_spurious, 'Possible': strict_possible, 'Actual': strict_actual, 'Precision': strict_precision,
-                                'Recall': strict_recall, 'F1': strict_f1}}
-    all_dict['Total_scores'].update(strict_dict)
+    # strict_dict = {'Strict': {'Correct': strict_correct, 'Incorrect': strict_incorrect, 'Partial': strict_partial, 'Missed': strict_missed,
+    #                             'Spurious': strict_spurious, 'Possible': strict_possible, 'Actual': strict_actual, 'Precision': strict_precision,
+    #                             'Recall': strict_recall, 'F1': strict_f1}}
+    # all_dict['Total_scores'].update(strict_dict)
 
-    exact_correct = sum([x['exact']['correct'] for x in selected_sem_eval_list])
-    exact_incorrect = sum([x['exact']['incorrect'] for x in selected_sem_eval_list])
-    exact_partial = sum([x['exact']['partial'] for x in selected_sem_eval_list])
-    exact_missed = sum([x['exact']['missed'] for x in selected_sem_eval_list])
-    exact_spurious = sum([x['exact']['spurious'] for x in selected_sem_eval_list])
-    exact_possible = sum([x['exact']['possible'] for x in selected_sem_eval_list])
-    exact_actual = sum([x['exact']['actual'] for x in selected_sem_eval_list])
-    exact_precision = statistics.mean([x['exact']['precision'] for x in selected_sem_eval_list])
-    exact_recall = statistics.mean([x['exact']['recall'] for x in selected_sem_eval_list])
-    exact_f1 = statistics.mean([x['exact']['f1'] for x in selected_sem_eval_list])
+    # exact_correct = sum([x['exact']['correct'] for x in selected_sem_eval_list])
+    # exact_incorrect = sum([x['exact']['incorrect'] for x in selected_sem_eval_list])
+    # exact_partial = sum([x['exact']['partial'] for x in selected_sem_eval_list])
+    # exact_missed = sum([x['exact']['missed'] for x in selected_sem_eval_list])
+    # exact_spurious = sum([x['exact']['spurious'] for x in selected_sem_eval_list])
+    # exact_possible = sum([x['exact']['possible'] for x in selected_sem_eval_list])
+    # exact_actual = sum([x['exact']['actual'] for x in selected_sem_eval_list])
+    # exact_precision = statistics.mean([x['exact']['precision'] for x in selected_sem_eval_list])
+    # exact_recall = statistics.mean([x['exact']['recall'] for x in selected_sem_eval_list])
+    # exact_f1 = statistics.mean([x['exact']['f1'] for x in selected_sem_eval_list])
 
-    exact_dict = {'Exact': {'Correct': exact_correct, 'Incorrect': exact_incorrect, 'Partial': exact_partial, 'Missed': exact_missed,
-                                'Spurious': exact_spurious, 'Possible': exact_possible, 'Actual': exact_actual, 'Precision': exact_precision,
-                                'Recall': exact_recall, 'F1': exact_f1}}
-    all_dict['Total_scores'].update(exact_dict)
+    # exact_dict = {'Exact': {'Correct': exact_correct, 'Incorrect': exact_incorrect, 'Partial': exact_partial, 'Missed': exact_missed,
+    #                             'Spurious': exact_spurious, 'Possible': exact_possible, 'Actual': exact_actual, 'Precision': exact_precision,
+    #                             'Recall': exact_recall, 'F1': exact_f1}}
+    # all_dict['Total_scores'].update(exact_dict)
+    all_dict['Total_scores'] = collectTripleScores(selected_sem_eval_list, True)
+    all_dict['Scores_per_tag'] = dict()
 
-    all_dict.update({'Scores_per_tag': {}})
+    #all_dict.update({'Scores_per_tag': {}})
 
-    all_dict['Scores_per_tag'].update({'Subjects': {}})
+    #all_dict['Scores_per_tag'].update({'Subjects': {}})
 
-    sub_ent_type_correct = sum([x['SUB']['ent_type']['correct'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_incorrect = sum([x['SUB']['ent_type']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_partial = sum([x['SUB']['ent_type']['partial'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_missed = sum([x['SUB']['ent_type']['missed'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_spurious = sum([x['SUB']['ent_type']['spurious'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_possible = sum([x['SUB']['ent_type']['possible'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_actual = sum([x['SUB']['ent_type']['actual'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_precision = statistics.mean([x['SUB']['ent_type']['precision'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_recall = statistics.mean([x['SUB']['ent_type']['recall'] for x in selected_sem_eval_list_per_tag])
-    sub_ent_type_f1 = statistics.mean([x['SUB']['ent_type']['f1'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_correct = sum([x['SUB']['ent_type']['correct'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_incorrect = sum([x['SUB']['ent_type']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_partial = sum([x['SUB']['ent_type']['partial'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_missed = sum([x['SUB']['ent_type']['missed'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_spurious = sum([x['SUB']['ent_type']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_possible = sum([x['SUB']['ent_type']['possible'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_actual = sum([x['SUB']['ent_type']['actual'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_precision = statistics.mean([x['SUB']['ent_type']['precision'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_recall = statistics.mean([x['SUB']['ent_type']['recall'] for x in selected_sem_eval_list_per_tag])
+    # sub_ent_type_f1 = statistics.mean([x['SUB']['ent_type']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    sub_ent_type_dict = {'Ent_type': {'Correct': sub_ent_type_correct, 'Incorrect': sub_ent_type_incorrect, 'Partial': sub_ent_type_partial, 'Missed': sub_ent_type_missed,
-                           'Spurious': sub_ent_type_spurious, 'Possible': sub_ent_type_possible, 'Actual': sub_ent_type_actual, 'Precision': sub_ent_type_precision,
-                           'Recall': sub_ent_type_recall, 'F1': sub_ent_type_f1}}
-    all_dict['Scores_per_tag']['Subjects'].update(sub_ent_type_dict)
+    # sub_ent_type_dict = {'Ent_type': {'Correct': sub_ent_type_correct, 'Incorrect': sub_ent_type_incorrect, 'Partial': sub_ent_type_partial, 'Missed': sub_ent_type_missed,
+    #                        'Spurious': sub_ent_type_spurious, 'Possible': sub_ent_type_possible, 'Actual': sub_ent_type_actual, 'Precision': sub_ent_type_precision,
+    #                        'Recall': sub_ent_type_recall, 'F1': sub_ent_type_f1}}
+    # all_dict['Scores_per_tag']['Subjects'].update(sub_ent_type_dict)
 
-    sub_partial_correct = sum([x['SUB']['partial']['correct'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_incorrect = sum([x['SUB']['partial']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_partial = sum([x['SUB']['partial']['partial'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_missed = sum([x['SUB']['partial']['missed'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_spurious = sum([x['SUB']['partial']['spurious'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_possible = sum([x['SUB']['partial']['possible'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_actual = sum([x['SUB']['partial']['actual'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_precision = statistics.mean([x['SUB']['partial']['precision'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_recall = statistics.mean([x['SUB']['partial']['recall'] for x in selected_sem_eval_list_per_tag])
-    sub_partial_f1 = statistics.mean([x['SUB']['partial']['f1'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_correct = sum([x['SUB']['partial']['correct'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_incorrect = sum([x['SUB']['partial']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_partial = sum([x['SUB']['partial']['partial'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_missed = sum([x['SUB']['partial']['missed'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_spurious = sum([x['SUB']['partial']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_possible = sum([x['SUB']['partial']['possible'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_actual = sum([x['SUB']['partial']['actual'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_precision = statistics.mean([x['SUB']['partial']['precision'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_recall = statistics.mean([x['SUB']['partial']['recall'] for x in selected_sem_eval_list_per_tag])
+    # sub_partial_f1 = statistics.mean([x['SUB']['partial']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    sub_partial_dict = {'Partial': {'Correct': sub_partial_correct, 'Incorrect': sub_partial_incorrect, 'Partial': sub_partial_partial, 'Missed': sub_partial_missed,
-                           'Spurious': sub_partial_spurious, 'Possible': sub_partial_possible, 'Actual': sub_partial_actual, 'Precision': sub_partial_precision,
-                           'Recall': sub_partial_recall, 'F1': sub_partial_f1}}
-    all_dict['Scores_per_tag']['Subjects'].update(sub_partial_dict)
+    # sub_partial_dict = {'Partial': {'Correct': sub_partial_correct, 'Incorrect': sub_partial_incorrect, 'Partial': sub_partial_partial, 'Missed': sub_partial_missed,
+    #                        'Spurious': sub_partial_spurious, 'Possible': sub_partial_possible, 'Actual': sub_partial_actual, 'Precision': sub_partial_precision,
+    #                        'Recall': sub_partial_recall, 'F1': sub_partial_f1}}
+    # all_dict['Scores_per_tag']['Subjects'].update(sub_partial_dict)
 
-    sub_strict_correct = sum([x['SUB']['strict']['correct'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_incorrect = sum([x['SUB']['strict']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_partial = sum([x['SUB']['strict']['partial'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_missed = sum([x['SUB']['strict']['missed'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_spurious = sum([x['SUB']['strict']['spurious'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_possible = sum([x['SUB']['strict']['possible'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_actual = sum([x['SUB']['strict']['actual'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_precision = statistics.mean([x['SUB']['strict']['precision'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_recall = statistics.mean([x['SUB']['strict']['recall'] for x in selected_sem_eval_list_per_tag])
-    sub_strict_f1 = statistics.mean([x['SUB']['strict']['f1'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_correct = sum([x['SUB']['strict']['correct'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_incorrect = sum([x['SUB']['strict']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_partial = sum([x['SUB']['strict']['partial'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_missed = sum([x['SUB']['strict']['missed'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_spurious = sum([x['SUB']['strict']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_possible = sum([x['SUB']['strict']['possible'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_actual = sum([x['SUB']['strict']['actual'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_precision = statistics.mean([x['SUB']['strict']['precision'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_recall = statistics.mean([x['SUB']['strict']['recall'] for x in selected_sem_eval_list_per_tag])
+    # sub_strict_f1 = statistics.mean([x['SUB']['strict']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    sub_strict_dict = {'Strict': {'Correct': sub_strict_correct, 'Incorrect': sub_strict_incorrect, 'Partial': sub_strict_partial, 'Missed': sub_strict_missed,
-                           'Spurious': sub_strict_spurious, 'Possible': sub_strict_possible, 'Actual': sub_strict_actual, 'Precision': sub_strict_precision,
-                           'Recall': sub_strict_recall, 'F1': sub_strict_f1}}
-    all_dict['Scores_per_tag']['Subjects'].update(sub_strict_dict)
+    # sub_strict_dict = {'Strict': {'Correct': sub_strict_correct, 'Incorrect': sub_strict_incorrect, 'Partial': sub_strict_partial, 'Missed': sub_strict_missed,
+    #                        'Spurious': sub_strict_spurious, 'Possible': sub_strict_possible, 'Actual': sub_strict_actual, 'Precision': sub_strict_precision,
+    #                        'Recall': sub_strict_recall, 'F1': sub_strict_f1}}
+    # all_dict['Scores_per_tag']['Subjects'].update(sub_strict_dict)
 
-    sub_exact_correct = sum([x['SUB']['exact']['correct'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_incorrect = sum([x['SUB']['exact']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_partial = sum([x['SUB']['exact']['partial'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_missed = sum([x['SUB']['exact']['missed'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_spurious = sum([x['SUB']['exact']['spurious'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_possible = sum([x['SUB']['exact']['possible'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_actual = sum([x['SUB']['exact']['actual'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_precision = statistics.mean([x['SUB']['exact']['precision'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_reacall = statistics.mean([x['SUB']['exact']['recall'] for x in selected_sem_eval_list_per_tag])
-    sub_exact_f1 = statistics.mean([x['SUB']['exact']['f1'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_correct = sum([x['SUB']['exact']['correct'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_incorrect = sum([x['SUB']['exact']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_partial = sum([x['SUB']['exact']['partial'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_missed = sum([x['SUB']['exact']['missed'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_spurious = sum([x['SUB']['exact']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_possible = sum([x['SUB']['exact']['possible'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_actual = sum([x['SUB']['exact']['actual'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_precision = statistics.mean([x['SUB']['exact']['precision'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_reacall = statistics.mean([x['SUB']['exact']['recall'] for x in selected_sem_eval_list_per_tag])
+    # sub_exact_f1 = statistics.mean([x['SUB']['exact']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    sub_exact_dict = {'Exact': {'Correct': sub_exact_correct, 'Incorrect': sub_exact_incorrect, 'Partial': sub_exact_partial, 'Missed': sub_exact_missed,
-                                'Spurious': sub_exact_spurious, 'Possible': sub_exact_possible, 'Actual': sub_exact_actual,
-                                'Precision': sub_exact_precision,
-                                'Recall': sub_exact_reacall, 'F1': sub_exact_f1}}
-    all_dict['Scores_per_tag']['Subjects'].update(sub_exact_dict)
+    # sub_exact_dict = {'Exact': {'Correct': sub_exact_correct, 'Incorrect': sub_exact_incorrect, 'Partial': sub_exact_partial, 'Missed': sub_exact_missed,
+    #                             'Spurious': sub_exact_spurious, 'Possible': sub_exact_possible, 'Actual': sub_exact_actual,
+    #                             'Precision': sub_exact_precision,
+    #                             'Recall': sub_exact_reacall, 'F1': sub_exact_f1}}
+    # all_dict['Scores_per_tag']['Subjects'].update(sub_exact_dict)
 
-    all_dict['Scores_per_tag'].update({'Predicates': {}})
+    all_dict['Scores_per_tag']['Subjects'] = collectTagScores(selected_sem_eval_list_per_tag, "SUB", True)
 
-    pred_ent_type_correct = sum([x['PRED']['ent_type']['correct'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_incorrect = sum([x['PRED']['ent_type']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_partial = sum([x['PRED']['ent_type']['partial'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_missed = sum([x['PRED']['ent_type']['missed'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_spurious = sum([x['PRED']['ent_type']['spurious'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_possible = sum([x['PRED']['ent_type']['possible'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_actual = sum([x['PRED']['ent_type']['actual'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_precision = statistics.mean([x['PRED']['ent_type']['precision'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_recall = statistics.mean([x['PRED']['ent_type']['recall'] for x in selected_sem_eval_list_per_tag])
-    pred_ent_type_f1 = statistics.mean([x['PRED']['ent_type']['f1'] for x in selected_sem_eval_list_per_tag])
+    # all_dict['Scores_per_tag'].update({'Predicates': {}})
 
-    pred_ent_type_dict = {
-        'Ent_type': {'Correct': pred_ent_type_correct, 'Incorrect': pred_ent_type_incorrect, 'Partial': pred_ent_type_partial, 'Missed': pred_ent_type_missed,
-                     'Spurious': pred_ent_type_spurious, 'Possible': pred_ent_type_possible, 'Actual': pred_ent_type_actual, 'Precision': pred_ent_type_precision,
-                     'Recall': pred_ent_type_recall, 'F1': pred_ent_type_f1}}
-    all_dict['Scores_per_tag']['Predicates'].update(pred_ent_type_dict)
+    # pred_ent_type_correct = sum([x['PRED']['ent_type']['correct'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_incorrect = sum([x['PRED']['ent_type']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_partial = sum([x['PRED']['ent_type']['partial'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_missed = sum([x['PRED']['ent_type']['missed'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_spurious = sum([x['PRED']['ent_type']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_possible = sum([x['PRED']['ent_type']['possible'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_actual = sum([x['PRED']['ent_type']['actual'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_precision = statistics.mean([x['PRED']['ent_type']['precision'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_recall = statistics.mean([x['PRED']['ent_type']['recall'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_f1 = statistics.mean([x['PRED']['ent_type']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    pred_partial_correct = sum([x['PRED']['partial']['correct'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_incorrect = sum([x['PRED']['partial']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_partial = sum([x['PRED']['partial']['partial'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_missed = sum([x['PRED']['partial']['missed'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_spurious = sum([x['PRED']['partial']['spurious'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_possible = sum([x['PRED']['partial']['possible'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_actual = sum([x['PRED']['partial']['actual'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_precision = statistics.mean([x['PRED']['partial']['precision'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_recall = statistics.mean([x['PRED']['partial']['recall'] for x in selected_sem_eval_list_per_tag])
-    pred_partial_f1 = statistics.mean([x['PRED']['partial']['f1'] for x in selected_sem_eval_list_per_tag])
+    # pred_ent_type_dict = {
+    #     'Ent_type': {'Correct': pred_ent_type_correct, 'Incorrect': pred_ent_type_incorrect, 'Partial': pred_ent_type_partial, 'Missed': pred_ent_type_missed,
+    #                  'Spurious': pred_ent_type_spurious, 'Possible': pred_ent_type_possible, 'Actual': pred_ent_type_actual, 'Precision': pred_ent_type_precision,
+    #                  'Recall': pred_ent_type_recall, 'F1': pred_ent_type_f1}}
+    # all_dict['Scores_per_tag']['Predicates'].update(pred_ent_type_dict)
 
-    pred_partial_dict = {
-        'Partial': {'Correct': pred_partial_correct, 'Incorrect': pred_partial_incorrect, 'Partial': pred_partial_partial, 'Missed': pred_partial_missed,
-                    'Spurious': pred_partial_spurious, 'Possible': pred_partial_possible, 'Actual': pred_partial_actual, 'Precision': pred_partial_precision,
-                    'Recall': pred_partial_recall, 'F1': pred_partial_f1}}
-    all_dict['Scores_per_tag']['Predicates'].update(pred_partial_dict)
+    # pred_partial_correct = sum([x['PRED']['partial']['correct'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_incorrect = sum([x['PRED']['partial']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_partial = sum([x['PRED']['partial']['partial'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_missed = sum([x['PRED']['partial']['missed'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_spurious = sum([x['PRED']['partial']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_possible = sum([x['PRED']['partial']['possible'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_actual = sum([x['PRED']['partial']['actual'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_precision = statistics.mean([x['PRED']['partial']['precision'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_recall = statistics.mean([x['PRED']['partial']['recall'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_f1 = statistics.mean([x['PRED']['partial']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    pred_strict_correct = sum([x['PRED']['strict']['correct'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_incorrect = sum([x['PRED']['strict']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_partial = sum([x['PRED']['strict']['partial'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_missed = sum([x['PRED']['strict']['missed'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_spurious = sum([x['PRED']['strict']['spurious'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_possible = sum([x['PRED']['strict']['possible'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_actual = sum([x['PRED']['strict']['actual'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_precision = statistics.mean([x['PRED']['strict']['precision'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_recall = statistics.mean([x['PRED']['strict']['recall'] for x in selected_sem_eval_list_per_tag])
-    pred_strict_f1 = statistics.mean([x['PRED']['strict']['f1'] for x in selected_sem_eval_list_per_tag])
+    # pred_partial_dict = {
+    #     'Partial': {'Correct': pred_partial_correct, 'Incorrect': pred_partial_incorrect, 'Partial': pred_partial_partial, 'Missed': pred_partial_missed,
+    #                 'Spurious': pred_partial_spurious, 'Possible': pred_partial_possible, 'Actual': pred_partial_actual, 'Precision': pred_partial_precision,
+    #                 'Recall': pred_partial_recall, 'F1': pred_partial_f1}}
+    # all_dict['Scores_per_tag']['Predicates'].update(pred_partial_dict)
 
-    pred_strict_dict = {'Strict': {'Correct': pred_strict_correct, 'Incorrect': pred_strict_incorrect, 'Partial': pred_strict_partial, 'Missed': pred_strict_missed,
-                                'Spurious': pred_strict_spurious, 'Possible': pred_strict_possible, 'Actual': pred_strict_actual,
-                                'Precision': pred_strict_precision,
-                                'Recall': pred_strict_recall, 'F1': pred_strict_f1}}
-    all_dict['Scores_per_tag']['Predicates'].update(pred_strict_dict)
+    # pred_strict_correct = sum([x['PRED']['strict']['correct'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_incorrect = sum([x['PRED']['strict']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_partial = sum([x['PRED']['strict']['partial'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_missed = sum([x['PRED']['strict']['missed'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_spurious = sum([x['PRED']['strict']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_possible = sum([x['PRED']['strict']['possible'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_actual = sum([x['PRED']['strict']['actual'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_precision = statistics.mean([x['PRED']['strict']['precision'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_recall = statistics.mean([x['PRED']['strict']['recall'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_f1 = statistics.mean([x['PRED']['strict']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    pred_exact_correct = sum([x['PRED']['exact']['correct'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_incorrect = sum([x['PRED']['exact']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_partial = sum([x['PRED']['exact']['partial'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_missed = sum([x['PRED']['exact']['missed'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_spurious = sum([x['PRED']['exact']['spurious'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_possible = sum([x['PRED']['exact']['possible'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_actual = sum([x['PRED']['exact']['actual'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_precision = statistics.mean([x['PRED']['exact']['precision'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_recall = statistics.mean([x['PRED']['exact']['recall'] for x in selected_sem_eval_list_per_tag])
-    pred_exact_f1 = statistics.mean([x['PRED']['exact']['f1'] for x in selected_sem_eval_list_per_tag])
+    # pred_strict_dict = {'Strict': {'Correct': pred_strict_correct, 'Incorrect': pred_strict_incorrect, 'Partial': pred_strict_partial, 'Missed': pred_strict_missed,
+    #                             'Spurious': pred_strict_spurious, 'Possible': pred_strict_possible, 'Actual': pred_strict_actual,
+    #                             'Precision': pred_strict_precision,
+    #                             'Recall': pred_strict_recall, 'F1': pred_strict_f1}}
+    # all_dict['Scores_per_tag']['Predicates'].update(pred_strict_dict)
 
-    pred_exact_dict = {'Exact': {'Correct': pred_exact_correct, 'Incorrect': pred_exact_incorrect, 'Partial': pred_exact_partial, 'Missed': pred_exact_missed,
-                              'Spurious': pred_exact_spurious, 'Possible': pred_exact_possible, 'Actual': pred_exact_actual,
-                              'Precision': pred_exact_precision,
-                              'Recall': pred_exact_recall, 'F1': pred_exact_f1}}
-    all_dict['Scores_per_tag']['Predicates'].update(pred_exact_dict)
+    # pred_exact_correct = sum([x['PRED']['exact']['correct'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_incorrect = sum([x['PRED']['exact']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_partial = sum([x['PRED']['exact']['partial'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_missed = sum([x['PRED']['exact']['missed'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_spurious = sum([x['PRED']['exact']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_possible = sum([x['PRED']['exact']['possible'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_actual = sum([x['PRED']['exact']['actual'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_precision = statistics.mean([x['PRED']['exact']['precision'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_recall = statistics.mean([x['PRED']['exact']['recall'] for x in selected_sem_eval_list_per_tag])
+    # pred_exact_f1 = statistics.mean([x['PRED']['exact']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    all_dict['Scores_per_tag'].update({'Objects': {}})
+    # pred_exact_dict = {'Exact': {'Correct': pred_exact_correct, 'Incorrect': pred_exact_incorrect, 'Partial': pred_exact_partial, 'Missed': pred_exact_missed,
+    #                           'Spurious': pred_exact_spurious, 'Possible': pred_exact_possible, 'Actual': pred_exact_actual,
+    #                           'Precision': pred_exact_precision,
+    #                           'Recall': pred_exact_recall, 'F1': pred_exact_f1}}
+    # all_dict['Scores_per_tag']['Predicates'].update(pred_exact_dict)
 
-    obj_ent_type_correct = sum([x['OBJ']['ent_type']['correct'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_incorrect = sum([x['OBJ']['ent_type']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_partial = sum([x['OBJ']['ent_type']['partial'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_missed = sum([x['OBJ']['ent_type']['missed'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_spurious = sum([x['OBJ']['ent_type']['spurious'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_possible = sum([x['OBJ']['ent_type']['possible'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_actual = sum([x['OBJ']['ent_type']['actual'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_precision = statistics.mean([x['OBJ']['ent_type']['precision'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_recall = statistics.mean([x['OBJ']['ent_type']['recall'] for x in selected_sem_eval_list_per_tag])
-    obj_ent_type_f1 = statistics.mean([x['OBJ']['ent_type']['f1'] for x in selected_sem_eval_list_per_tag])
+    all_dict['Scores_per_tag']['Predicates'] = collectTagScores(selected_sem_eval_list_per_tag, "PRED", True)
 
-    obj_ent_type_dict = {
-        'Ent_type': {'Correct': obj_ent_type_correct, 'Incorrect': obj_ent_type_incorrect, 'Partial': obj_ent_type_partial, 'Missed': obj_ent_type_missed,
-                     'Spurious': obj_ent_type_spurious, 'Possible': obj_ent_type_possible, 'Actual': obj_ent_type_actual, 'Precision': obj_ent_type_precision,
-                     'Recall': obj_ent_type_recall, 'F1': obj_ent_type_f1}}
-    all_dict['Scores_per_tag']['Objects'].update(obj_ent_type_dict)
+    # all_dict['Scores_per_tag'].update({'Objects': {}})
 
-    obj_partial_correct = sum([x['OBJ']['partial']['correct'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_incorrect = sum([x['OBJ']['partial']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_partial = sum([x['OBJ']['partial']['partial'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_missed = sum([x['OBJ']['partial']['missed'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_spurious = sum([x['OBJ']['partial']['spurious'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_possible = sum([x['OBJ']['partial']['possible'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_actual = sum([x['OBJ']['partial']['actual'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_precision = statistics.mean([x['OBJ']['partial']['precision'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_recall = statistics.mean([x['OBJ']['partial']['recall'] for x in selected_sem_eval_list_per_tag])
-    obj_partial_f1 = statistics.mean([x['OBJ']['partial']['f1'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_correct = sum([x['OBJ']['ent_type']['correct'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_incorrect = sum([x['OBJ']['ent_type']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_partial = sum([x['OBJ']['ent_type']['partial'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_missed = sum([x['OBJ']['ent_type']['missed'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_spurious = sum([x['OBJ']['ent_type']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_possible = sum([x['OBJ']['ent_type']['possible'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_actual = sum([x['OBJ']['ent_type']['actual'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_precision = statistics.mean([x['OBJ']['ent_type']['precision'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_recall = statistics.mean([x['OBJ']['ent_type']['recall'] for x in selected_sem_eval_list_per_tag])
+    # obj_ent_type_f1 = statistics.mean([x['OBJ']['ent_type']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    obj_partial_dict = {
-        'Partial': {'Correct': obj_partial_correct, 'Incorrect': obj_partial_incorrect, 'Partial': obj_partial_partial, 'Missed': obj_partial_missed,
-                    'Spurious': obj_partial_spurious, 'Possible': obj_partial_possible, 'Actual': obj_partial_actual, 'Precision': obj_partial_precision,
-                    'Recall': obj_partial_recall, 'F1': obj_partial_f1}}
-    all_dict['Scores_per_tag']['Objects'].update(obj_partial_dict)
+    # obj_ent_type_dict = {
+    #     'Ent_type': {'Correct': obj_ent_type_correct, 'Incorrect': obj_ent_type_incorrect, 'Partial': obj_ent_type_partial, 'Missed': obj_ent_type_missed,
+    #                  'Spurious': obj_ent_type_spurious, 'Possible': obj_ent_type_possible, 'Actual': obj_ent_type_actual, 'Precision': obj_ent_type_precision,
+    #                  'Recall': obj_ent_type_recall, 'F1': obj_ent_type_f1}}
+    # all_dict['Scores_per_tag']['Objects'].update(obj_ent_type_dict)
 
-    obj_strict_correct = sum([x['OBJ']['strict']['correct'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_incorrect = sum([x['OBJ']['strict']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_partial = sum([x['OBJ']['strict']['partial'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_missed = sum([x['OBJ']['strict']['missed'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_spurious = sum([x['OBJ']['strict']['spurious'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_possible = sum([x['OBJ']['strict']['possible'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_actual = sum([x['OBJ']['strict']['actual'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_precision = statistics.mean([x['OBJ']['strict']['precision'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_recall = statistics.mean([x['OBJ']['strict']['recall'] for x in selected_sem_eval_list_per_tag])
-    obj_strict_f1 = statistics.mean([x['OBJ']['strict']['f1'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_correct = sum([x['OBJ']['partial']['correct'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_incorrect = sum([x['OBJ']['partial']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_partial = sum([x['OBJ']['partial']['partial'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_missed = sum([x['OBJ']['partial']['missed'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_spurious = sum([x['OBJ']['partial']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_possible = sum([x['OBJ']['partial']['possible'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_actual = sum([x['OBJ']['partial']['actual'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_precision = statistics.mean([x['OBJ']['partial']['precision'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_recall = statistics.mean([x['OBJ']['partial']['recall'] for x in selected_sem_eval_list_per_tag])
+    # obj_partial_f1 = statistics.mean([x['OBJ']['partial']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    obj_strict_dict = {
-        'Strict': {'Correct': obj_strict_correct, 'Incorrect': obj_strict_incorrect, 'Partial': obj_strict_partial, 'Missed': obj_strict_missed,
-                   'Spurious': obj_strict_spurious, 'Possible': obj_strict_possible, 'Actual': obj_strict_actual,
-                   'Precision': obj_strict_precision,
-                   'Recall': obj_strict_recall, 'F1': obj_strict_f1}}
-    all_dict['Scores_per_tag']['Objects'].update(obj_strict_dict)
+    # obj_partial_dict = {
+    #     'Partial': {'Correct': obj_partial_correct, 'Incorrect': obj_partial_incorrect, 'Partial': obj_partial_partial, 'Missed': obj_partial_missed,
+    #                 'Spurious': obj_partial_spurious, 'Possible': obj_partial_possible, 'Actual': obj_partial_actual, 'Precision': obj_partial_precision,
+    #                 'Recall': obj_partial_recall, 'F1': obj_partial_f1}}
+    # all_dict['Scores_per_tag']['Objects'].update(obj_partial_dict)
 
-    obj_exact_correct = sum([x['OBJ']['exact']['correct'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_incorrect = sum([x['OBJ']['exact']['incorrect'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_partial = sum([x['OBJ']['exact']['partial'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_missed = sum([x['OBJ']['exact']['missed'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_spurious = sum([x['OBJ']['exact']['spurious'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_possible = sum([x['OBJ']['exact']['possible'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_actual = sum([x['OBJ']['exact']['actual'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_precision = statistics.mean([x['OBJ']['exact']['precision'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_recall = statistics.mean([x['OBJ']['exact']['recall'] for x in selected_sem_eval_list_per_tag])
-    obj_exact_f1 = statistics.mean([x['OBJ']['exact']['f1'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_correct = sum([x['OBJ']['strict']['correct'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_incorrect = sum([x['OBJ']['strict']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_partial = sum([x['OBJ']['strict']['partial'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_missed = sum([x['OBJ']['strict']['missed'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_spurious = sum([x['OBJ']['strict']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_possible = sum([x['OBJ']['strict']['possible'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_actual = sum([x['OBJ']['strict']['actual'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_precision = statistics.mean([x['OBJ']['strict']['precision'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_recall = statistics.mean([x['OBJ']['strict']['recall'] for x in selected_sem_eval_list_per_tag])
+    # obj_strict_f1 = statistics.mean([x['OBJ']['strict']['f1'] for x in selected_sem_eval_list_per_tag])
 
-    obj_exact_dict = {'Exact': {'Correct': obj_exact_correct, 'Incorrect': obj_exact_incorrect, 'Partial': obj_exact_partial, 'Missed': obj_exact_missed,
-                               'Spurious': obj_exact_spurious, 'Possible': obj_exact_possible, 'Actual': obj_exact_actual,
-                               'Precision': obj_exact_precision,
-                               'Recall': obj_exact_recall, 'F1': obj_exact_f1}}
-    all_dict['Scores_per_tag']['Objects'].update(obj_exact_dict)
+    # obj_strict_dict = {
+    #     'Strict': {'Correct': obj_strict_correct, 'Incorrect': obj_strict_incorrect, 'Partial': obj_strict_partial, 'Missed': obj_strict_missed,
+    #                'Spurious': obj_strict_spurious, 'Possible': obj_strict_possible, 'Actual': obj_strict_actual,
+    #                'Precision': obj_strict_precision,
+    #                'Recall': obj_strict_recall, 'F1': obj_strict_f1}}
+    # all_dict['Scores_per_tag']['Objects'].update(obj_strict_dict)
+
+    # obj_exact_correct = sum([x['OBJ']['exact']['correct'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_incorrect = sum([x['OBJ']['exact']['incorrect'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_partial = sum([x['OBJ']['exact']['partial'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_missed = sum([x['OBJ']['exact']['missed'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_spurious = sum([x['OBJ']['exact']['spurious'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_possible = sum([x['OBJ']['exact']['possible'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_actual = sum([x['OBJ']['exact']['actual'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_precision = statistics.mean([x['OBJ']['exact']['precision'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_recall = statistics.mean([x['OBJ']['exact']['recall'] for x in selected_sem_eval_list_per_tag])
+    # obj_exact_f1 = statistics.mean([x['OBJ']['exact']['f1'] for x in selected_sem_eval_list_per_tag])
+
+    # obj_exact_dict = {'Exact': {'Correct': obj_exact_correct, 'Incorrect': obj_exact_incorrect, 'Partial': obj_exact_partial, 'Missed': obj_exact_missed,
+    #                            'Spurious': obj_exact_spurious, 'Possible': obj_exact_possible, 'Actual': obj_exact_actual,
+    #                            'Precision': obj_exact_precision,
+    #                            'Recall': obj_exact_recall, 'F1': obj_exact_f1}}
+    # all_dict['Scores_per_tag']['Objects'].update(obj_exact_dict)
+
+    all_dict['Scores_per_tag']['Objects'] = collectTagScores(selected_sem_eval_list_per_tag, "OBJ", True)
 
     return all_dict, triple_score, combination_selected, triple_score_sum
 
@@ -1426,9 +1529,12 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     function2_time = timeit.default_timer() 
     print("calculate system score time :", function2_time - function1_time)
     all_dict2 = calculateExactTripleScore(all_ref_triples, all_cand_triples, all_dict)
+    print(all_dict2.keys())
+    print(all_dict2['Total_scores'].keys())
     keys_scores = ['Ent_type', 'Partial', 'Exact', 'Strict']
     keys_metrics = ['Precision', 'Recall', 'F1']
     items = ['Correct', 'Incorrect', 'Partial', 'Missed', 'Spurious', 'Actual', 'Possible']
+    tags = ['Subjects', 'Predicates', 'Objects']
     for key in keys_scores:
         print(f"For {key}:\nPrecision: {all_dict2['Total_scores'][key][keys_metrics[0]]}     Recall: {all_dict2['Total_scores'][key][keys_metrics[1]]}     F1: {all_dict2['Total_scores'][key][keys_metrics[2]]}\n")
     for key in keys_scores:
@@ -1436,7 +1542,13 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
         for item in items:
             print(f"{item}: {all_dict2['Total_scores'][key][item]}", end=", ")
         print()
-    with open(outputfile_overall, 'w') as outfile:
+    for tag in tags:
+        for key in keys_scores:
+            print(f"For {tag} {key}:")
+            for item in items:
+                print(f"{item}: {all_dict2['Scores_per_tag'][tag][key][item]}", end=", ")
+            print()
+    with open(outputfile_overall, 'w', encoding='utf-8') as outfile:
         json.dump(all_dict2, outfile)
 
     all = {}
@@ -1447,8 +1559,8 @@ def evaluate(input_dataframe, outputfile_overall, outputfile_details):
     all['triple_score'] = triple_score
     all['combination'] = combination_selected
     all['triple_score_sum'] = triple_score_sum
-    with open(outputfile_details, 'w') as outfile:
-        json.dump(all, outfile)
+    with open(outputfile_details, 'w', encoding='utf-8') as outfile:
+        json.dump(all, outfile, ensure_ascii=False)
 
 
 def main(
@@ -1466,22 +1578,25 @@ def main(
 ):
     # Main function from benchmark.py
     print(f"Output: {output_path}\nDetails: {output_details_path}")
-    #pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/vicuna-7b-combined-corr.pickle'
-    #test = "UofA-LINGO/webnlg-test-cleaned"
+    pickle = 'C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/orca-mini-3-7b-at-sft-ske.pickle'
+    test = "UofA-LINGO/ske-test"
     if pickle == "":
         df = benchmark(model_path=model_path, tok=tok, max_tokens=max_tokens, dump=dump, prompt_template=prompt_template, error=error, test=test, load_8bit=load_8bit)
     else:
         output = pd.read_pickle(pickle)
         print(len(output.values()))
         dt = load_dataset(test)
-        df = pd.DataFrame(dt["test"])#.iloc[25:26]
+        df = pd.DataFrame(dt["test"])#.iloc[2:3]
         df["gt"] = df["output"]
         df = df.drop(columns=["output"])
         # Ind 0 in test
         #op = [['(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | producer | Wharton_Tiers)\n(Turn_Me_On | artist | Wharton)']]
         # Ind 25 in test
         #op = [['(Nord_(album) | artist | Sludge_metal)\n(Nord | genre | Sludge_Metal)']]
-        df["model_output"] = [x[0] for x in output.values()]
+        # Ind 33 in test
+        #op = [['(Brandon_Carter | birthDate | 1942-01-01)']]
+        #op = [['(Turn_Me_On_(album) | runtime | 35.1)\n(Turn_Me_On_(album) | runtime | 35.1)']]
+        df["model_output"] = [x[0] for x in output.values()]#[2:3]
         #df["model_output"] = [x[0] for x in op][:1]
     if output_path == "":
         output_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined.json'
