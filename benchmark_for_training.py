@@ -191,6 +191,8 @@ def get_Cands_and_Refs_from_csv(df):
     for i in range(len(df)):
         # newtriples = []
         triples_str_cand = df['model_output'].values[i]
+        if i == 457:
+            print(triples_str_cand)
         # vicuna: for this model
         exp_target = "Therefore, here is the answer in the correct format:"
         # Check for explanation-based model:
@@ -200,8 +202,14 @@ def get_Cands_and_Refs_from_csv(df):
         else:
             # Only look at final output triples.
             triples_str_cand = triples_str_cand[triples_str_cand.find(exp_target)+len(exp_target):].strip()
-        # This looks for the form of '...|...|...', which we expect our triples to be in.
-        triples_cand = re.findall(r"'(.*?[|].*?[|].*?)'", triples_str_cand)
+        # This looks for the form of '...|...|...', which we expect our triples to be in. This must be followed with
+        # a closing square bracket or comma to match to avoid edge cases such as the one below:
+        # ['prop's | pred | value's'] would match to -> ['s | pred | value'] without the [],].
+        triples_cand = re.findall(r"'(.*?[|].*?[|].*?)'[],]", triples_str_cand)
+        if i == 457:
+            print('\n\n')
+            print(triples_str_cand)
+            print(triples_cand)
         tmp = []
         for triple in triples_cand:
             triple = triple.strip('[\'')
