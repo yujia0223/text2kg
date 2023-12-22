@@ -1307,6 +1307,7 @@ def main(
     print(f"Output: {output_path}\nDetails: {output_details_path}")
     if pickle == "":
         df = benchmark(model_path=model_path, tok=tok, dump=dump)
+    """
     else:
         output = pd.read_pickle(pickle)
         dt = load_dataset("UofA-LINGO/text_to_triplets")
@@ -1321,6 +1322,7 @@ def main(
         output_details_path = 'results/evaluation/llama/vicuna-7b-with-explanasion-test-combined-details.json'
         print(f"Set default output_path: {output_details_path}")
     evaluate(df, output_path, output_details_path)
+    """
 
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
 if __name__ == '__main__':
