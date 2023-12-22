@@ -9,10 +9,10 @@ BASE_MODEL = os.environ.get("BASE_MODEL", None)
 PEFT_MODEL = os.environ.get("PEFT_MODEL", None)
 assert (
     BASE_MODEL
-), "Please specify a value for BASE_MODEL environment variable, e.g. `export BASE_MODEL=huggyllama/llama-7b`"  # noqa: E501
+), "Please specify a value for BASE_MODEL environment variable, e.g. `export BASE_MODEL=/home/tsadler/models/base_models/llama-7b`"  # noqa: E501
 assert(
     PEFT_MODEL
-), "Set PEFT_MODEL env variable."
+), "Please specify a value for BASE_MODEL environment variable, e.g. `export PEFT_MODEL=home/tsadler/models/llama-7b-at-sft`"
 
 tokenizer = LlamaTokenizer.from_pretrained(BASE_MODEL)
 
