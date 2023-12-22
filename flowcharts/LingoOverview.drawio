@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" modified="2023-11-16T17:26:45.434Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0" etag="_LoU4BJKfWNmK1hdsJ6x" version="22.1.2" type="device">
+  <diagram name="Page-1" id="JxSSMjlfhQ2JCTrACVTP">
+    <mxGraphModel dx="1050" dy="538" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="DfJBmfHt8-B8I2MRZDYn-1" target="DfJBmfHt8-B8I2MRZDYn-3" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="DfJBmfHt8-B8I2MRZDYn-1" target="DfJBmfHt8-B8I2MRZDYn-5" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-1" value="Test and training data prepared before fine-tuning the models." style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="30" y="10" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="DfJBmfHt8-B8I2MRZDYn-2" target="DfJBmfHt8-B8I2MRZDYn-9" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-2" value="Split data into training and validation sets, with approximately 15% of the data being used for validation." style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="200" y="210" width="120" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="aqt9Vq4uKE41iRDh60oI-2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="DfJBmfHt8-B8I2MRZDYn-3" target="aqt9Vq4uKE41iRDh60oI-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-3" value="Formatting triples and preparing different training tasks" style="whiteSpace=wrap;html=1;rounded=1;" parent="1" vertex="1">
+          <mxGeometry x="200" y="10" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="aqt9Vq4uKE41iRDh60oI-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="DfJBmfHt8-B8I2MRZDYn-5" target="DfJBmfHt8-B8I2MRZDYn-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-5" value="GPT 4 and human generated instructions randomly inserted for each training task. Triple generation instruction used for test set." style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="20" y="210" width="140" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="DfJBmfHt8-B8I2MRZDYn-9" target="DfJBmfHt8-B8I2MRZDYn-11" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-9" value="Supervised finetuning with autotrain / SFT or alpaca-lora finetune.py, utilizing PEFT and LoRA" style="whiteSpace=wrap;html=1;rounded=1;" parent="1" vertex="1">
+          <mxGeometry x="347.5" y="220" width="170" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="DfJBmfHt8-B8I2MRZDYn-11" target="DfJBmfHt8-B8I2MRZDYn-13" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-11" value="Apply LoRA weights to model after fine-tuning is complete." style="whiteSpace=wrap;html=1;rounded=1;" parent="1" vertex="1">
+          <mxGeometry x="372.5" y="320" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="DfJBmfHt8-B8I2MRZDYn-13" target="DfJBmfHt8-B8I2MRZDYn-15" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-13" value="Benchmark model by first generating output for the test set." style="whiteSpace=wrap;html=1;rounded=1;" parent="1" vertex="1">
+          <mxGeometry x="372.5" y="400" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="DfJBmfHt8-B8I2MRZDYn-15" value="Evaluate triples and record the results." style="whiteSpace=wrap;html=1;rounded=1;" parent="1" vertex="1">
+          <mxGeometry x="372.5" y="480" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="aqt9Vq4uKE41iRDh60oI-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="aqt9Vq4uKE41iRDh60oI-1" target="DfJBmfHt8-B8I2MRZDYn-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aqt9Vq4uKE41iRDh60oI-1" value="Training tasks include triple generation, triple generation with explanations, text generation given triples, and reflection on triples." style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="175" y="100" width="170" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
