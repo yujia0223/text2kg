@@ -5,12 +5,21 @@ gpt4 = pd.read_table("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/script
 gpt4_0314 = pd.read_table("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/20230509-154059_web_nlg_test_50_samples_with_seed_66_num_of_runs_1_gpt4-0314.tsv")
 gpt35 = pd.read_table("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/20231011-225458_web_nlg_test_all_samples_with_seed_66_num_of_runs_1_chatgpt35.tsv")
 
+gpt4_new = pd.read_csv("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/gpt4_results/gpt4-results-full.csv")
+
 out4 = {}
 out40341 = {}
 out35 = {}
+out4_new = {}
 ind = 0
-print(len(gpt35['triples']))
 
+for entry in gpt4_new['response']:
+    out4_new[ind] = entry
+    ind += 1
+
+"""
+print(len(gpt35['triples']))
+ind = 0
 for val in gpt35['id']:
     if int(val.strip("Id"))-1 != ind:
         print(ind)
@@ -60,6 +69,9 @@ print(out4[0])
 #with open("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/gpt4-0314-results.pickle", "wb") as handle:
     #pickle.dump(out40341, handle, protocol=pickle.HIGHEST_PROTOCOL)
 """
+with open("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/gpt4-results-full.pickle", "wb") as handle:
+    pickle.dump(out4_new, handle, protocol=pickle.HIGHEST_PROTOCOL)
+"""
 gpt4inds = []
 gpt4_0314inds = []
 for val in gpt4['id']:
@@ -74,6 +86,5 @@ if gpt4_0314inds == gpt4inds:
 print(gpt4inds)
 print(len(gpt4inds))
 """
-
-test = pd.read_pickle("raw_outputs/mistral-7b-cleaned.pickle")
-print(test[0])
+t = pd.read_pickle("C:/Users/tyms4/OneDrive/Documents/Work/UofAResearch/scripts/raw_outputs/gpt4-results-full.pickle").values()
+print([x for x in t])
