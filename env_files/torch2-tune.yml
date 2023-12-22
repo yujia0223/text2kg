@@ -1,4 +1,4 @@
-name: torch2-old
+name: torch2-tune
 channels:
   - conda-forge
   - defaults
@@ -134,7 +134,7 @@ dependencies:
       - pandas==2.0.2
       - pathspec==0.11.1
       - pathtools==0.1.2
-      - peft==0.3.0.dev0
+      - peft==0.3.0
       - pillow==9.5.0
       - platformdirs==3.5.1
       - protobuf==4.23.2
@@ -181,4 +181,4 @@ dependencies:
       - websockets==11.0.3
       - xxhash==3.2.0
       - yarl==1.9.2
-prefix: /home/tsadler/miniconda3/envs/torch2-old
+prefix: /home/tsadler/miniconda3/envs/torch2-tune
