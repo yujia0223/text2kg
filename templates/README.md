@@ -1,3 +1,7 @@
+# Templates
+
+This is the templates directory from the [alpaca-lora](https://github.com/tloen/alpaca-lora) repository, with some extra templates we have used. The description of our templates has been added alongside the existing descriptions below.
+
 # Prompt templates
 
 This directory contains template styles for the prompts used to finetune LoRA models.
@@ -44,3 +48,23 @@ A trimmed down alpaca template which seems to perform just as well and spare som
 ### vigogne
 
 The default alpaca template, translated to french. This template was used to train the "Vigogne" LoRA and is to be used to query it, or for extra fine tuning.
+
+### llama1
+
+The main template we use for training llama-2 models. The template was found at [OpenAssistant/llama2-13b-orca-8k-3319](https://huggingface.co/OpenAssistant/llama2-13b-orca-8k-3319) and worked well for fine-tuning. For fine-tuning with only a few samples of data, llama2 should be used as it is the one utilized by Meta.
+
+### llama2
+
+The Meta template for llama-2 models. Used for benchmarking base models or fine-tuning them. Similar performance to llama1.
+
+### orca_mini
+
+A template for orca_mini models, although it was found to work worse than the alpaca template. As such, this template was mostly unused but is left here for documentation purposes. Please use alpaca for training orca_mini models.
+
+### llongorca
+
+The template used for tuning and benchmarking the LlongOrca models, found directly at the [model page](https://https://huggingface.co/Open-Orca/LlongOrca-7B-16k).
+
+### mistral
+
+The template used for training the Mistral models, found at their [model page](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1).
