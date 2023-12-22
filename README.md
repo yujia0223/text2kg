@@ -172,3 +172,7 @@ Essentailly a python file version of the ChatGPT_API_Wrapper.ipynb Jupyter noteb
 ### tsv_to_pickle.py
 
 This file was used to convert the TSV/CSV files used to store ChatGPT output into pickle files so they could more easily be used by benchmark_and_evaluate.py. There are no input arguments as script is only really useful for the described purpose. Depending on the format of the output, more preprocessing is done within this file before ouputting the final pickle file.
+
+### extract_incorrect.py
+
+This file was used to setup the "reflection" task for the webnlg dataset. It reads in a detailed output file, as well as a dataset. For any entry where there were incorrect, missed, or spurious triples on the "exact" nervaluate metric, the ground truth triples from the dataset were added to the output. If the result was correct, the statement "The generated triplets are already valid." was added to the output instead. Usage: `python extract_incorrect.py --details_file=PATH`. Please note that there may be some modifications required to use in for a more general case still, such as the destination HuggingFace repository.
