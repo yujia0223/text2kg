@@ -1476,6 +1476,8 @@ def main(
 
 #main(currentpath + '/Refs.xml', currentpath + '/Cands2.xml', currentpath + '/Results.json')
 if __name__ == '__main__':
+    print("This file has been left here for documentation purposes. Please use benchmark_and_evaluate as it is far more updated.")
+    exit(0)
     fire.Fire(main)
     #main()
     """
