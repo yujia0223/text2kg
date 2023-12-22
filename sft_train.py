@@ -85,6 +85,8 @@ def train(
     resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
     prompt_template_name: str = "alpaca",  # The prompt template to use, will default to alpaca.
 ):
+    print("For training using the sft trainer, please make use of the finetune_sft.py script instead.")
+    exit(0)
     if base_model == "":
         print("Please specify a base model: --base_model=/home2/tsadler/models...")
         exit(0)
