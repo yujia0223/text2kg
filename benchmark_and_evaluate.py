@@ -5,7 +5,7 @@ from datasets import load_dataset
 import fire
 import torch
 import transformers
-from transformers import LlamaForCausalLM, LlamaTokenizer, GenerationConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import pickle
 # alpaca-lora utils
 from utils.callbacks import Iteratorize, Stream
@@ -54,11 +54,11 @@ def benchmark(
     print(f"Using tokenizer at (blank means model_path): {tok}")
     tokenizer = None
     if tok == "":
-        tokenizer = LlamaTokenizer.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
     else:
-        tokenizer = LlamaTokenizer.from_pretrained(tok)
+        tokenizer = AutoTokenizer.from_pretrained(tok)
 
-    model = LlamaForCausalLM.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         model_path,
         load_in_8bit=load_8bit,
         torch_dtype=torch.float16,
