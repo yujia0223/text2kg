@@ -1,6 +1,6 @@
 ## Environment Setup
 
-To setup one of the environments used for training and benchmarking models, use the environment files here. Models were benchmarked in the same environment they were trained in.
+To setup one of the environments used for training and benchmarking models, use the environment files here. Models were benchmarked in the same environment they were trained in. Make sure to change the prefix at the bottom of the environment file you want to use to fit your conda installation path.
 
 ### Torch2-tune
 This environment is for use with the alpaca-lora finetune.py script. It is not compatible with any version of autotrain. To create the environment, run the following:
